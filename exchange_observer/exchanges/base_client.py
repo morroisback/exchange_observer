@@ -5,8 +5,8 @@ import websockets
 from abc import abstractmethod
 from typing import Any, Callable
 
-from exchange_observer.core.interfaces import IExchangeClient
-from exchange_observer.core.models import PriceData
+from exchange_observer.core import IExchangeClient
+from exchange_observer.core import PriceData
 
 
 class BaseExchangeClient(IExchangeClient):

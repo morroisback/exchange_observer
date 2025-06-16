@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from exchange_observer.core.models import PriceData
+from .models import PriceData
 
 
 class IExchangeClient(ABC):

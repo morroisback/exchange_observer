@@ -3,8 +3,8 @@ import json
 
 from typing import Callable
 
+from .base_client import BaseExchangeClient
 from exchange_observer.core.models import PriceData
-from exchange_observer.exchanges.base_client import BaseExchangeClient
 
 from exchange_observer.config import WEB_BYBIT_SPOT_PUBLIC, REST_BYBIT_SPOT_INFO, MAX_ARGS_PER_MESSAGE
 
