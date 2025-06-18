@@ -34,14 +34,17 @@ class BinanceClient(BaseExchangeClient):
                         self.call_error_callback("No symbols found or API response format changed")
                         return []
 
-                    active_symbols = [
-                        symbol.get("symbol")
-                        for symbol in symbols_list
-                        if symbol.get("status") == "TRADING" and symbol.get("symbol")
-                    ]
+                    active_symbol_info = {}
+                    for s in symbols_list:
+                        symbol = s.get("symbol")
+                        if s.get("status") == "TRADING" and symbol:
+                            active_symbol_info[symbol] = {
+                                "base_coin": s.get("baseAsset"),
+                                "quote_coin": s.get("quoteAsset"),
+                            }
 
-                    self.logger.info(f"Found {len(active_symbols)} active symbols")
-                    return active_symbols
+                    self.logger.info(f"Found {len(active_symbol_info)} active symbols with coin info")
+                    return active_symbol_info
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")
@@ -76,13 +79,15 @@ class BinanceClient(BaseExchangeClient):
 
     def handle_single_data_item(self, item_data: dict[str, Any]) -> None:
         event_type = item_data.get("e")
-        symbol_name = item_data.get("s")
+        symbol = item_data.get("s")
 
-        if not symbol_name:
+        if not symbol:
             return
 
-        if symbol_name not in self.data:
-            self.data[symbol_name] = PriceData(symbol_name)
+        if symbol not in self.data:
+            base_coin = self.symbols[symbol]["base_coin"]
+            quote_coin = self.symbols[symbol]["quote_coin"]
+            self.data[symbol] = PriceData(symbol, base_coin, quote_coin)
 
         if event_type == "24hrTicker":
             symbol_price_data = {
@@ -92,5 +97,5 @@ class BinanceClient(BaseExchangeClient):
                 "ask_price": item_data.get("a"),
                 "ask_quantity": item_data.get("A"),
             }
-            self.data[symbol_name].update(symbol_price_data)
-            self.call_date_callback({symbol_name: self.data[symbol_name]})
+            self.data[symbol].update(symbol_price_data)
+            self.call_date_callback({symbol: self.data[symbol]})

@@ -27,7 +27,7 @@ class BaseExchangeClient(IExchangeClient):
 
         self.websocket: websockets.ClientConnection | None = None
         self.data: dict[str, PriceData] = {}
-        self.symbols: list[str] = []
+        self.symbols: dict[str, dict[str, str]] = []
         self.is_running = False
         self.websocket_task: asyncio.Task | None = None
         self.websocket_url: str = ""
@@ -59,7 +59,7 @@ class BaseExchangeClient(IExchangeClient):
             asyncio.create_task(self.async_callback(self.on_disconnected_callback))
 
     @abstractmethod
-    async def fetch_symbols(self) -> list[str]:
+    async def fetch_symbols(self) -> dict[str, dict[str, str]]:
         pass
 
     @abstractmethod
@@ -77,10 +77,19 @@ class BaseExchangeClient(IExchangeClient):
                 self.logger.info(f"{self.__class__.__name__} WebSocket connected")
                 self.call_connected_callback()
 
+                # symbols_full_info = await self.fetch_symbols()
                 self.symbols = await self.fetch_symbols()
                 if not self.symbols:
                     self.logger.warning("No symbols to subscribe, closing WebSocket")
                     return
+
+                # for symbol, symbol_info in self.symbols.items():
+                #     if symbol not in self.data:
+                #         self.data[symbol] = PriceData(
+                #             symbol=symbol,
+                #             base_coin=symbol_info.get("base_coin"),
+                #             quote_coin=symbol_info.get("quote_coin")
+                #         )
 
                 await self.subscribe_symbols()
 

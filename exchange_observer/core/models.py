@@ -4,6 +4,8 @@ from dataclasses import dataclass
 @dataclass
 class PriceData:
     symbol: str
+    base_coin: str | None = None
+    quote_coin: str | None = None
     last_price: str | None = None
     bid_price: str | None = None
     bid_quantity: str | None = None
@@ -25,6 +27,8 @@ class PriceData:
     def to_dict(self) -> dict[str, str | None]:
         return {
             "symbol": self.symbol,
+            "base_coin": self.base_coin,
+            "quote_coin": self.quote_coin,
             "last_price": self.last_price,
             "bid_price": self.bid_price,
             "bid_quantity": self.bid_quantity,

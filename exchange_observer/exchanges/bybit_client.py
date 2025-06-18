@@ -20,7 +20,7 @@ class BybitClient(BaseExchangeClient):
         super().__init__(on_data_callback, on_error_callback, on_connected_callback, on_disconnected_callback)
         self.websocket_url = WEB_BYBIT_SPOT_PUBLIC
 
-    async def fetch_symbols(self) -> list:
+    async def fetch_symbols(self) -> dict[str, dict[str, str]]:
         self.logger.info("Fetching symbols from Bybit REST API...")
         try:
             async with aiohttp.ClientSession() as session:
@@ -34,14 +34,17 @@ class BybitClient(BaseExchangeClient):
                         self.call_error_callback("No symbols found or API response format changed")
                         return []
 
-                    active_symbols = [
-                        symbol.get("symbol")
-                        for symbol in symbols_list
-                        if symbol.get("status") == "Trading" and symbol.get("symbol")
-                    ]
+                    active_symbol_info = {}
+                    for s in symbols_list:
+                        symbol = s.get("symbol")
+                        if s.get("status") == "Trading" and symbol:
+                            active_symbol_info[symbol] = {
+                                "base_coin": s.get("baseCoin"),
+                                "quote_coin": s.get("quoteCoin"),
+                            }
 
-                    self.logger.info(f"Found {len(active_symbols)} active symbols")
-                    return active_symbols
+                    self.logger.info(f"Found {len(active_symbol_info)} active symbols with coin info")
+                    return active_symbol_info
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")
@@ -61,9 +64,9 @@ class BybitClient(BaseExchangeClient):
             return
 
         subscribe_args = []
-        for symbol_name in self.symbols:
-            subscribe_args.append(f"tickers.{symbol_name}")
-            subscribe_args.append(f"orderbook.1.{symbol_name}")
+        for symbol in self.symbols:
+            subscribe_args.append(f"tickers.{symbol}")
+            subscribe_args.append(f"orderbook.1.{symbol}")
 
         for i in range(0, len(subscribe_args), MAX_ARGS_PER_MESSAGE):
             chunk = subscribe_args[i : i + MAX_ARGS_PER_MESSAGE]
@@ -88,14 +91,14 @@ class BybitClient(BaseExchangeClient):
                 return
 
             if "topic" in message_data and "data" in message_data:
-                symbol_name = ""
+                symbol = ""
                 symbol_price_data = {}
 
                 if "tickers" in message_data["topic"]:
-                    symbol_name = message_data["data"].get("symbol")
+                    symbol = message_data["data"].get("symbol")
                     symbol_price_data = {"last_price": message_data["data"].get("lastPrice")}
                 elif "b" in message_data["data"] and "a" in message_data["data"]:
-                    symbol_name = message_data["data"].get("s")
+                    symbol = message_data["data"].get("s")
                     bids = message_data["data"]["b"]
                     asks = message_data["data"]["a"]
 
@@ -106,11 +109,13 @@ class BybitClient(BaseExchangeClient):
                         symbol_price_data["ask_price"] = asks[0][0]
                         symbol_price_data["ask_quantity"] = asks[0][1]
 
-                if symbol_name and symbol_price_data:
-                    if symbol_name not in self.data:
-                        self.data[symbol_name] = PriceData(symbol_name)
-                    self.data[symbol_name].update(symbol_price_data)
-                    self.call_date_callback({symbol_name: self.data[symbol_name]})
+                if symbol and symbol_price_data:
+                    if symbol not in self.data:
+                        base_coin = self.symbols[symbol]["base_coin"]
+                        quote_coin = self.symbols[symbol]["quote_coin"]
+                        self.data[symbol] = PriceData(symbol, base_coin, quote_coin)
+                    self.data[symbol].update(symbol_price_data)
+                    self.call_date_callback({symbol: self.data[symbol]})
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
             self.call_error_callback(f"JSON decode error processing message: {e}")
