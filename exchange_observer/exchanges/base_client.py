@@ -77,19 +77,18 @@ class BaseExchangeClient(IExchangeClient):
                 self.logger.info(f"{self.__class__.__name__} WebSocket connected")
                 self.call_connected_callback()
 
-                # symbols_full_info = await self.fetch_symbols()
                 self.symbols = await self.fetch_symbols()
                 if not self.symbols:
                     self.logger.warning("No symbols to subscribe, closing WebSocket")
                     return
 
-                # for symbol, symbol_info in self.symbols.items():
-                #     if symbol not in self.data:
-                #         self.data[symbol] = PriceData(
-                #             symbol=symbol,
-                #             base_coin=symbol_info.get("base_coin"),
-                #             quote_coin=symbol_info.get("quote_coin")
-                #         )
+                for symbol, symbol_info in self.symbols.items():
+                    if symbol not in self.data:
+                        self.data[symbol] = PriceData(
+                            symbol=symbol,
+                            base_coin=symbol_info.get("base_coin"),
+                            quote_coin=symbol_info.get("quote_coin")
+                        )
 
                 await self.subscribe_symbols()
 

@@ -6,7 +6,7 @@ from typing import Any, Callable
 from .base_client import BaseExchangeClient
 from exchange_observer.core import PriceData
 
-from exchange_observer.config import WEB_BINANCE_SPOT_PUBLIC, REST_BINANCE_SPOT_INFO
+from exchange_observer.config import BINANCE_WEB_SPOT_PUBLIC, BINANCE_REST_SPOT_INFO
 
 
 class BinanceClient(BaseExchangeClient):
@@ -18,13 +18,13 @@ class BinanceClient(BaseExchangeClient):
         on_disconnected_callback: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(on_data_callback, on_error_callback, on_connected_callback, on_disconnected_callback)
-        self.websocket_url = WEB_BINANCE_SPOT_PUBLIC
+        self.websocket_url = BINANCE_WEB_SPOT_PUBLIC
 
     async def fetch_symbols(self) -> list:
-        self.logger.info("Fetching symbols from Bybit REST API...")
+        self.logger.info("Fetching symbols from REST API...")
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(REST_BINANCE_SPOT_INFO) as response:
+                async with session.get(BINANCE_REST_SPOT_INFO) as response:
                     response.raise_for_status()
                     data = await response.json()
 
@@ -65,10 +65,10 @@ class BinanceClient(BaseExchangeClient):
         try:
             message_data = json.loads(message)
             if isinstance(message_data, list):
-                for item in message_data:
-                    self.handle_single_data_item(item)
+                for item_data in message_data:
+                    self.handle_single_item_data(item_data)
             else:
-                self.handle_single_data_item(message_data)
+                self.handle_single_item_data(message_data)
 
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
@@ -77,7 +77,7 @@ class BinanceClient(BaseExchangeClient):
             self.logger.exception(f"Unexpected error processing message: {e}")
             self.call_error_callback(f"Unexpected error processing message: {e}")
 
-    def handle_single_data_item(self, item_data: dict[str, Any]) -> None:
+    def handle_single_item_data(self, item_data: dict[str, Any]) -> None:
         event_type = item_data.get("e")
         symbol = item_data.get("s")
 
@@ -85,15 +85,13 @@ class BinanceClient(BaseExchangeClient):
             return
 
         if symbol not in self.data:
-            base_coin = self.symbols[symbol]["base_coin"]
-            quote_coin = self.symbols[symbol]["quote_coin"]
-            self.data[symbol] = PriceData(symbol, base_coin, quote_coin)
+            self.logger.warning(f"Skipping update for {symbol}: not initialized with full coin info")
 
         if event_type == "24hrTicker":
             symbol_price_data = {
                 "last_price": item_data.get("c"),
                 "bid_price": item_data.get("b"),
-                "bid_quantity": item_data.get("A"),
+                "bid_quantity": item_data.get("B"),
                 "ask_price": item_data.get("a"),
                 "ask_quantity": item_data.get("A"),
             }
