@@ -5,7 +5,7 @@ import time
 from typing import Callable
 
 from .base_client import BaseExchangeClient
-from exchange_observer.core import PriceData
+from exchange_observer.core import PriceData, Exchange
 
 from exchange_observer.config import GATEIO_WEB_SPOT_PUBLIC, GATEIO_REST_SPOT_INFO
 
@@ -20,8 +20,9 @@ class GateioClient(BaseExchangeClient):
     ) -> None:
         super().__init__(on_data_callback, on_error_callback, on_connected_callback, on_disconnected_callback)
         self.websocket_url = GATEIO_WEB_SPOT_PUBLIC
+        self.exchange = Exchange.GATEIO
 
-    async def fetch_symbols(self) -> dict[str, dict[str, str]]:
+    async def fetch_symbols(self) -> list[str]:
         self.logger.info("Fetching symbols from REST API...")
         try:
             async with aiohttp.ClientSession() as session:
@@ -34,17 +35,21 @@ class GateioClient(BaseExchangeClient):
                         self.call_error_callback("No symbols found or API response format changed")
                         return []
 
-                    active_symbol_info = {}
+                    active_symbols = []
                     for s in symbols_list:
                         symbol = s.get("id")
                         if s.get("trade_status") == "tradable" and symbol:
-                            active_symbol_info[symbol] = {
-                                "base_coin": s.get("base"),
-                                "quote_coin": s.get("quote"),
-                            }
+                            active_symbols.append(symbol)
+                            symbol = symbol.replace("_", "")
+                            self.data[symbol] = PriceData(
+                                exchange=self.exchange,
+                                symbol=symbol,
+                                base_coin=s.get("base"),
+                                quote_coin=s.get("quote"),
+                            )
 
-                    self.logger.info(f"Found {len(active_symbol_info)} active symbols with coin info")
-                    return active_symbol_info
+                    self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
+                    return active_symbols
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")
@@ -58,39 +63,33 @@ class GateioClient(BaseExchangeClient):
             self.call_error_callback(f"Unexpected error fetching symbols: {e}")
             return []
 
-    async def subscribe_symbols(self) -> None:
+    async def subscribe_symbols(self, symbols: list[str]) -> None:
         if not self.websocket:
             self.logger.error("WebSocket not connected for subscription")
             return
-
-        if not self.symbols:
-            self.logger.error("No symbols to subscribe to.")
-            return
-
-        subscribe_symbols = list(self.symbols.keys())
 
         tickers_subscribe_message = json.dumps(
             {
                 "time": int(time.time()),
                 "channel": "spot.tickers",
                 "event": "subscribe",
-                "payload": subscribe_symbols,
+                "payload": symbols,
             }
         )
 
-        order_book_subscribe_message = json.dumps(
+        book_ticker_subscribe_message = json.dumps(
             {
                 "time": int(time.time()),
                 "channel": "spot.book_ticker",
                 "event": "subscribe",
-                "payload": subscribe_symbols,
+                "payload": symbols,
             }
         )
 
         try:
             await self.websocket.send(tickers_subscribe_message)
-            await self.websocket.send(order_book_subscribe_message)
-            self.logger.info(f"Sent subscribe for {len(subscribe_symbols)} symbols")
+            await self.websocket.send(book_ticker_subscribe_message)
+            self.logger.info(f"Sent subscribe for {len(symbols)} symbols")
             # await asyncio.sleep(0.05)
         except Exception as e:
             self.logger.error(f"Error sending bulk subscription: {e}")
@@ -99,25 +98,24 @@ class GateioClient(BaseExchangeClient):
     def process_message(self, message: str) -> None:
         try:
             message_data = json.loads(message)
-            if "event" in message_data:
-                if message_data["event"] == "error":
-                    self.logger.warning(f"WebSocket error: {message_data.get('error', '')}")
-                    self.call_error_callback(f"WebSocket error: {message_data.get('error', '')}")
-                    return
-                elif message_data["event"] != "update":
-                    return
+            event_type = message_data.get("event")
+            item_data = message_data.get("result", {})
 
-            if "channel" in message_data and "result" in message_data:
-                item_data = message_data["result"]
+            if event_type == "subscribe":
+                if item_data.get("status") != "success":
+                    self.logger.warning(f"Subscribe error: {message_data.get('error', '')}")
+                    self.call_error_callback(f"Subscribe error: {message_data.get('error', '')}")
+                return
 
+            if event_type == "update" and "channel" in message_data:
                 symbol = ""
                 symbol_price_data = {}
 
                 if "tickers" in message_data["channel"]:
-                    symbol = item_data.get("currency_pair", "")
+                    symbol = item_data.get("currency_pair", "").replace("_", "")
                     symbol_price_data = {"last_price": item_data.get("last")}
                 elif "book_ticker" in message_data["channel"]:
-                    symbol = item_data.get("s", "")
+                    symbol = item_data.get("s", "").replace("_", "")
                     symbol_price_data = {
                         "bid_price": item_data.get("b"),
                         "bid_quantity": item_data.get("B"),
@@ -130,7 +128,7 @@ class GateioClient(BaseExchangeClient):
                         self.logger.warning(f"Skipping update for {symbol}: not initialized with full coin info")
                         return
                     self.data[symbol].update(symbol_price_data)
-                    self.call_date_callback({symbol: self.data[symbol]})
+                    self.call_data_callback({symbol: self.data[symbol]})
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
             self.call_error_callback(f"JSON decode error processing message: {e}")

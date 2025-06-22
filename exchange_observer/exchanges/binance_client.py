@@ -4,7 +4,7 @@ import json
 from typing import Any, Callable
 
 from .base_client import BaseExchangeClient
-from exchange_observer.core import PriceData
+from exchange_observer.core import PriceData, Exchange
 
 from exchange_observer.config import BINANCE_WEB_SPOT_PUBLIC, BINANCE_REST_SPOT_INFO
 
@@ -19,8 +19,9 @@ class BinanceClient(BaseExchangeClient):
     ) -> None:
         super().__init__(on_data_callback, on_error_callback, on_connected_callback, on_disconnected_callback)
         self.websocket_url = BINANCE_WEB_SPOT_PUBLIC
+        self.exchange = Exchange.BINANCE
 
-    async def fetch_symbols(self) -> list:
+    async def fetch_symbols(self) -> list[str]:
         self.logger.info("Fetching symbols from REST API...")
         try:
             async with aiohttp.ClientSession() as session:
@@ -34,17 +35,20 @@ class BinanceClient(BaseExchangeClient):
                         self.call_error_callback("No symbols found or API response format changed")
                         return []
 
-                    active_symbol_info = {}
+                    active_symbols = []
                     for s in symbols_list:
                         symbol = s.get("symbol")
                         if s.get("status") == "TRADING" and symbol:
-                            active_symbol_info[symbol] = {
-                                "base_coin": s.get("baseAsset"),
-                                "quote_coin": s.get("quoteAsset"),
-                            }
+                            active_symbols.append(symbol)
+                            self.data[symbol] = PriceData(
+                                exchange=self.exchange,
+                                symbol=symbol,
+                                base_coin=s.get("baseAsset"),
+                                quote_coin=s.get("quoteAsset"),
+                            )
 
-                    self.logger.info(f"Found {len(active_symbol_info)} active symbols with coin info")
-                    return active_symbol_info
+                    self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
+                    return active_symbols
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")
@@ -58,8 +62,10 @@ class BinanceClient(BaseExchangeClient):
             self.call_error_callback(f"Unexpected error fetching symbols: {e}")
             return []
 
-    async def subscribe_symbols(self) -> None:
-        return
+    async def subscribe_symbols(self, _: list[str]) -> None:
+        if not self.websocket:
+            self.logger.error("WebSocket not connected for subscription")
+            return
 
     def process_message(self, message: str) -> None:
         try:
@@ -96,4 +102,4 @@ class BinanceClient(BaseExchangeClient):
                 "ask_quantity": item_data.get("A"),
             }
             self.data[symbol].update(symbol_price_data)
-            self.call_date_callback({symbol: self.data[symbol]})
+            self.call_data_callback({symbol: self.data[symbol]})

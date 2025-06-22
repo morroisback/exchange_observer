@@ -6,7 +6,7 @@ from abc import abstractmethod
 from typing import Any, Callable
 
 from exchange_observer.core import IExchangeClient
-from exchange_observer.core import PriceData
+from exchange_observer.core import PriceData, Exchange
 
 
 class BaseExchangeClient(IExchangeClient):
@@ -25,12 +25,17 @@ class BaseExchangeClient(IExchangeClient):
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
+        self.max_reconnect_attempts = 5
+        self.reconnect_delay_base = 5
+        self.reconnect_attempt = 0
+
         self.websocket: websockets.ClientConnection | None = None
-        self.data: dict[str, PriceData] = {}
-        self.symbols: dict[str, dict[str, str]] = []
-        self.is_running = False
         self.websocket_task: asyncio.Task | None = None
+        self.is_running = False
+
+        self.data: dict[str, PriceData] = {}
         self.websocket_url: str = ""
+        self.exchange: Exchange = Exchange.NONE
 
     async def async_callback(self, callback: Callable, *args: Any, **kwargs: Any) -> None:
         try:
@@ -42,7 +47,7 @@ class BaseExchangeClient(IExchangeClient):
         except Exception as e:
             self.logger.error(f"Error in callback function {callback.__name__}: {e}")
 
-    def call_date_callback(self, data: dict[str, PriceData]) -> None:
+    def call_data_callback(self, data: dict[str, PriceData]) -> None:
         if self.on_data_callback:
             asyncio.create_task(self.async_callback(self.on_data_callback, data))
 
@@ -59,11 +64,11 @@ class BaseExchangeClient(IExchangeClient):
             asyncio.create_task(self.async_callback(self.on_disconnected_callback))
 
     @abstractmethod
-    async def fetch_symbols(self) -> dict[str, dict[str, str]]:
+    async def fetch_symbols(self) -> list[str]:
         pass
 
     @abstractmethod
-    async def subscribe_symbols(self) -> None:
+    async def subscribe_symbols(self, symbols: list[str]) -> None:
         pass
 
     @abstractmethod
@@ -71,59 +76,58 @@ class BaseExchangeClient(IExchangeClient):
         pass
 
     async def websocket_loop(self) -> None:
-        try:
-            async with websockets.connect(self.websocket_url, ping_interval=20, ping_timeout=10) as ws:
-                self.websocket = ws
-                self.logger.info(f"{self.__class__.__name__} WebSocket connected")
-                self.call_connected_callback()
+        while self.is_running and self.reconnect_attempt < self.max_reconnect_attempts:
+            try:
+                async with websockets.connect(self.websocket_url, ping_interval=20, ping_timeout=10) as ws:
+                    self.websocket = ws
+                    self.logger.info(f"{self.__class__.__name__} WebSocket connected")
+                    self.call_connected_callback()
+                    self.reconnect_attempt = 0
 
-                self.symbols = await self.fetch_symbols()
-                if not self.symbols:
-                    self.logger.warning("No symbols to subscribe, closing WebSocket")
-                    return
+                    symbols = await self.fetch_symbols()
+                    if not symbols:
+                        self.logger.warning("No symbols to subscribe, closing WebSocket")
+                        return
 
-                for symbol, symbol_info in self.symbols.items():
-                    if symbol not in self.data:
-                        self.data[symbol] = PriceData(
-                            symbol=symbol,
-                            base_coin=symbol_info.get("base_coin"),
-                            quote_coin=symbol_info.get("quote_coin")
-                        )
+                    await self.subscribe_symbols(symbols)
 
-                await self.subscribe_symbols()
+                    while self.is_running:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                            self.process_message(message)
+                        except asyncio.TimeoutError:
+                            continue
+                        except websockets.exceptions.ConnectionClosedOK:
+                            self.logger.info("WebSocket connection closed")
+                            break
+                        except websockets.exceptions.ConnectionClosed as e:
+                            self.logger.error(f"WebSocket connection closed with error: {e}")
+                            self.call_error_callback(f"WebSocket connection closed with error: {e}")
+                            break
+                        except Exception as e:
+                            self.logger.exception(f"Error receiving/processing WebSocket message: {e}")
+                            self.call_error_callback(f"Error receiving/processing WebSocket message: {e}")
+                            break
 
-                while self.is_running:
-                    try:
-                        message = await asyncio.wait_for(ws.recv(), timeout=1.0)
-                        self.process_message(message)
-                    except asyncio.TimeoutError:
-                        continue
-                    except websockets.exceptions.ConnectionClosedOK:
-                        self.logger.info("WebSocket connection closed")
-                        break
-                    except websockets.exceptions.ConnectionClosed as e:
-                        self.logger.error(f"WebSocket connection closed with error: {e}")
-                        self.call_error_callback(f"WebSocket connection closed with error: {e}")
-                        break
-                    except Exception as e:
-                        self.logger.exception(f"Error receiving/processing WebSocket message: {e}")
-                        self.call_error_callback(f"Error receiving/processing WebSocket message: {e}")
-                        break
+            except websockets.exceptions.InvalidURI as e:
+                self.logger.error(f"Invalid WebSocket URI: {e}")
+                self.call_error_callback(f"Invalid WebSocket URI: {e}")
+            except ConnectionRefusedError:
+                self.logger.error("Connection refused. Bybit server might be down or firewall blocking")
+                self.call_error_callback("Connection refused. Bybit server might be down or firewall blocking")
+            except Exception as e:
+                self.logger.exception(f"Unexpected error in WebSocket loop: {e}")
+                self.call_error_callback(f"Unexpected error in WebSocket loop: {e}")
+            finally:
+                self.websocket = None
 
-        except websockets.exceptions.InvalidURI as e:
-            self.logger.error(f"Invalid WebSocket URI: {e}")
-            self.call_error_callback(f"Invalid WebSocket URI: {e}")
-        except ConnectionRefusedError:
-            self.logger.error("Connection refused. Bybit server might be down or firewall blocking")
-            self.call_error_callback("Connection refused. Bybit server might be down or firewall blocking")
-        except Exception as e:
-            self.logger.exception(f"Unexpected error in WebSocket loop: {e}")
-            self.call_error_callback(f"Unexpected error in WebSocket loop: {e}")
-        finally:
-            self.websocket = None
-            self.is_running = False
-            self.logger.info(f"{self.__class__.__name__} WebSocket loop terminated")
-            self.call_disconnected_callback()
+        if self.reconnect_attempt >= self.max_reconnect_attempts:
+            self.logger.critical(f"Failed to reconnect after {self.max_reconnect_attempts} attempts")
+            self.call_error_callback(f"Failed to reconnect after {self.max_reconnect_attempts} attempts")
+
+        self.is_running = False
+        self.logger.info("WebSocket loop terminated")
+        self.call_disconnected_callback()
 
     async def start(self) -> None:
         if self.is_running:

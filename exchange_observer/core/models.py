@@ -1,8 +1,17 @@
 from dataclasses import dataclass
+from enum import StrEnum
+
+
+class Exchange(StrEnum):
+    NONE = ""
+    BINANCE = "Binance"
+    BYBIT = "Bybit"
+    GATEIO = "Gate.io"
 
 
 @dataclass
 class PriceData:
+    exchange: Exchange
     symbol: str
     base_coin: str | None = None
     quote_coin: str | None = None
@@ -26,6 +35,7 @@ class PriceData:
 
     def to_dict(self) -> dict[str, str | None]:
         return {
+            "exchange": self.exchange,
             "symbol": self.symbol,
             "base_coin": self.base_coin,
             "quote_coin": self.quote_coin,

@@ -5,5 +5,5 @@
 **/__pycache__
 **/*.pyc
 commons/
-exchange_parser_old/
-gui/
+/exchange_parser/
+/gui/
