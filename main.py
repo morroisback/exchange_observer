@@ -1,15 +1,14 @@
 import asyncio
 
-from exchange_observer.core.models import PriceData, Exchange
-# from exchange_observer.exchanges import BinanceClient, BybitClient, GateioClient
-from exchange_observer.exchanges import BybitClient
-from exchange_observer.utils.logger_config import setup_logging
+from exchange_observer.core import ExchangeDataManager, Exchange
+from exchange_observer.core import PriceData
+from exchange_observer.exchanges import BinanceClient, BybitClient, GateioClient
+
+from exchange_observer.utils import setup_logging
 
 
-async def main() -> None:
-    setup_logging()
-
-    exchange = Exchange.BYBIT
+async def test_clients() -> None:
+    exchange = Exchange.BINANCE
 
     def handle_data(data: dict[str, PriceData]) -> None:
         for s, pd in data.items():
@@ -24,7 +23,7 @@ async def main() -> None:
     def handle_disconnected() -> None:
         print(f"{exchange} client disconnected!")
 
-    client = BybitClient(
+    client = BinanceClient(
         on_data_callback=handle_data,
         on_error_callback=handle_error,
         on_connected_callback=handle_connected,
@@ -43,7 +42,36 @@ async def main() -> None:
         print(f"\nKeyboardInterrupt detected. Stopping {exchange} client...")
         await client.stop()
 
-    print("Main program finished")
+    print("Test client program finished")
+
+
+async def test_manager() -> None:
+    manager = ExchangeDataManager(
+        exchange_to_monitor=[Exchange.BINANCE, Exchange.BYBIT, Exchange.GATEIO],
+        arbitrage_check_interval_seconds=5,
+        min_arbitrage_profit_percent=0.05,
+        max_data_age_seconds=10
+    )
+
+    await manager.start()
+    print("Manager started. Waiting for data...")
+
+    try:
+        await asyncio.sleep(120)
+        print("\nStopping manager...")
+        await manager.stop()
+        await asyncio.sleep(2)
+    except KeyboardInterrupt:
+        print("\nKeyboardInterrupt detected. Stopping manager...")
+    
+    print("Test manager program finished")
+
+
+async def main() -> None:
+    setup_logging()
+
+    # await test_clients()
+    await test_manager()
 
 
 if __name__ == "__main__":

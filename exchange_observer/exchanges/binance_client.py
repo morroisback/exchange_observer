@@ -4,7 +4,7 @@ import json
 from typing import Any, Callable
 
 from .base_client import BaseExchangeClient
-from exchange_observer.core import PriceData, Exchange
+from exchange_observer.core.models import PriceData, Exchange
 
 from exchange_observer.config import BINANCE_WEB_SPOT_PUBLIC, BINANCE_REST_SPOT_INFO
 
@@ -49,6 +49,7 @@ class BinanceClient(BaseExchangeClient):
 
                     self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
                     return active_symbols
+                
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")

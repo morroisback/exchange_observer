@@ -15,23 +15,22 @@ class PriceData:
     symbol: str
     base_coin: str | None = None
     quote_coin: str | None = None
-    last_price: str | None = None
-    bid_price: str | None = None
-    bid_quantity: str | None = None
-    ask_price: str | None = None
-    ask_quantity: str | None = None
+    last_price: float | None = None
+    bid_price: float | None = None
+    bid_quantity: float | None = None
+    ask_price: float | None = None
+    ask_quantity: float | None = None
 
-    def update(self, data: dict[str, str]) -> None:
-        if "last_price" in data:
-            self.last_price = data["last_price"]
-        if "bid_price" in data:
-            self.bid_price = data["bid_price"]
-        if "bid_quantity" in data:
-            self.bid_quantity = data["bid_quantity"]
-        if "ask_price" in data:
-            self.ask_price = data["ask_price"]
-        if "ask_quantity" in data:
-            self.ask_quantity = data["ask_quantity"]
+    def update(self, new_data: dict[str, str]) -> None:
+        for key, value in new_data.items():
+            if hasattr(self, key) and value is not None:
+                if key in ("last_price", "bid_price", "bid_quantity", "ask_price", "ask_quantity"):
+                    try:
+                        setattr(self, key, float(value))
+                    except (ValueError, TypeError):
+                        pass
+                else:
+                    setattr(self, key, value)
 
     def to_dict(self) -> dict[str, str | None]:
         return {

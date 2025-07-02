@@ -4,7 +4,7 @@ import json
 from typing import Callable
 
 from .base_client import BaseExchangeClient
-from exchange_observer.core import PriceData, Exchange
+from exchange_observer.core.models import PriceData, Exchange
 
 from exchange_observer.config import BYBIT_WEB_SPOT_PUBLIC, BYBIT_REST_SPOT_INFO, BYBIT_MAX_ARGS_PER_MESSAGE
 
@@ -49,6 +49,7 @@ class BybitClient(BaseExchangeClient):
 
                     self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
                     return active_symbols
+                
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")
@@ -123,6 +124,7 @@ class BybitClient(BaseExchangeClient):
                         return
                     self.data[symbol].update(symbol_price_data)
                     self.call_data_callback({symbol: self.data[symbol]})
+
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
             self.call_error_callback(f"JSON decode error processing message: {e}")

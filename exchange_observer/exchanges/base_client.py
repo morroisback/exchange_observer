@@ -5,8 +5,8 @@ import websockets
 from abc import abstractmethod
 from typing import Any, Callable
 
-from exchange_observer.core import IExchangeClient
-from exchange_observer.core import PriceData, Exchange
+from exchange_observer.core.interfaces import IExchangeClient
+from exchange_observer.core.models import PriceData, Exchange
 
 
 class BaseExchangeClient(IExchangeClient):
@@ -42,8 +42,10 @@ class BaseExchangeClient(IExchangeClient):
             if asyncio.iscoroutinefunction(callback):
                 await callback(*args, **kwargs)
             else:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, callback, *args, **kwargs)
+                # loop = asyncio.get_event_loop()
+                # await loop.run_in_executor(None, callback, *args, **kwargs)
+                callback(*args, **kwargs)
+
         except Exception as e:
             self.logger.error(f"Error in callback function {callback.__name__}: {e}")
 
@@ -161,6 +163,9 @@ class BaseExchangeClient(IExchangeClient):
                     await self.websocket_task
                 except asyncio.CancelledError:
                     pass
+                except Exception as e:
+                    self.logger.error(f"Error while canceling websocket task: {e}")
+
             except Exception as e:
                 self.logger.error(f"Error waiting for websocket task to stop: {e}")
 
