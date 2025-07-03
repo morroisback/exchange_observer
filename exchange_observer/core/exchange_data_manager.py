@@ -56,9 +56,9 @@ class ExchangeDataManager:
     def create_client(self, exchange: Exchange) -> IExchangeClient | None:
         client_args = [
             self.on_price_data_receive,
-            self.on_client_error,
-            self.on_client_connected,
-            self.on_client_disconnected,
+            # self.on_client_error,
+            # self.on_client_connected,
+            # self.on_client_disconnected,
         ]
 
         if exchange == Exchange.BINANCE:
@@ -95,15 +95,13 @@ class ExchangeDataManager:
 
                         current_utc_time = datetime.now(timezone.utc)
 
-                        self.logger.info(f"\n{opportunities_df}")
-
                         self.logger.info(
-                            f"Symbol: {symbol} | "
-                            f"Buy on {row['buy_exchange']}: Ask={row['buy_price']:.8f} (Bid={buy_bid}, Ask={buy_ask}) | "
-                            f"Sell on {row['sell_exchange']}: Bid={row['sell_price']:.8f} (Bid={sell_bid}, Ask={sell_ask}) | "
-                            f"Profit: {row['profit_percent']:.4f}%"
-                            f" (Buy Data Age: {(current_utc_time - row['last_updated_buy']).total_seconds():.2f}s, "
-                            f"Sell Data Age: {(current_utc_time - row['last_updated_sell']).total_seconds():.2f}s)"
+                            f"\nSymbol: {symbol} | "
+                            f"Buy on {row["buy_exchange"]}: Ask={row["buy_price"]:.8f} (Bid={buy_bid}, Ask={buy_ask}) | "
+                            f"Sell on {row["sell_exchange"]}: Bid={row["sell_price"]:.8f} (Bid={sell_bid}, Ask={sell_ask}) | "
+                            f"Profit: {row["profit_percent"]:.4f}%"
+                            f" (Buy Data Age: {(current_utc_time - row["last_updated_buy"]).total_seconds():.2f}s, "
+                            f"Sell Data Age: {(current_utc_time - row["last_updated_sell"]).total_seconds():.2f}s)"
                         )
                 else:
                     self.logger.info("No arbitrage opportunities found.")

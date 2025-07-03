@@ -49,7 +49,7 @@ async def test_manager() -> None:
     manager = ExchangeDataManager(
         exchange_to_monitor=[Exchange.BINANCE, Exchange.BYBIT, Exchange.GATEIO],
         arbitrage_check_interval_seconds=5,
-        min_arbitrage_profit_percent=0.05,
+        min_arbitrage_profit_percent=0.01,
         max_data_age_seconds=10
     )
 
@@ -57,7 +57,7 @@ async def test_manager() -> None:
     print("Manager started. Waiting for data...")
 
     try:
-        await asyncio.sleep(120)
+        await asyncio.sleep(180)
         print("\nStopping manager...")
         await manager.stop()
         await asyncio.sleep(2)

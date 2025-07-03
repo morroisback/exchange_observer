@@ -5,11 +5,16 @@ import websockets
 from abc import abstractmethod
 from typing import Any, Callable
 
+from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, InvalidURI, WebSocketException
+
 from exchange_observer.core.interfaces import IExchangeClient
 from exchange_observer.core.models import PriceData, Exchange
 
 
 class BaseExchangeClient(IExchangeClient):
+    RECONNECT_MAX_DELAY_SECONDS = 60
+    RECONNECT_MAX_ATTEMPTS_PER_SESSION = 5
+
     def __init__(
         self,
         on_data_callback: Callable[[dict[str, PriceData]], None] | None = None,
@@ -25,8 +30,6 @@ class BaseExchangeClient(IExchangeClient):
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        self.max_reconnect_attempts = 5
-        self.reconnect_delay_base = 5
         self.reconnect_attempt = 0
 
         self.websocket: websockets.ClientConnection | None = None
@@ -77,55 +80,78 @@ class BaseExchangeClient(IExchangeClient):
     def process_message(self, message: str) -> None:
         pass
 
-    async def websocket_loop(self) -> None:
-        while self.is_running and self.reconnect_attempt < self.max_reconnect_attempts:
+    async def apply_reconnect_delay(self) -> None:
+        self.reconnect_attempt += 1
+        delay = min(2**self.reconnect_attempt, self.RECONNECT_MAX_DELAY_SECONDS)
+        self.logger.warning(f"Retrying connection in {delay:.2f} seconds (attempt {self.reconnect_attempt}).")
+        await asyncio.sleep(delay)
+
+    async def connect_and_subscribe(self) -> None:
+        self.websocket = None
+
+        try:
+            # async with websockets.connect(self.websocket_url, ping_interval=20, ping_timeout=10) as ws:
+            async with websockets.connect(self.websocket_url) as ws:
+                self.websocket = ws
+                self.logger.info("WebSocket connected")
+                self.call_connected_callback()
+                self.reconnect_attempt = 0
+
+                symbols = await self.fetch_symbols()
+                if not symbols:
+                    self.logger.error("No symbols to subscribe")
+                    self.call_error_callback("No symbols to subscribe")
+                    self.is_running = False
+                    return
+
+                await self.subscribe_symbols(symbols)
+                await self.receive_message()
+                self.logger.info("Message reception loop ended for current connection")
+
+        except asyncio.TimeoutError:
+            pass
+        except (InvalidURI, WebSocketException, ConnectionRefusedError, OSError) as e:
+            self.logger.error(f"Connection/Subscription error: {e}")
+            self.call_error_callback(f"Connection/Subscription error: {e}")
+        except Exception as e:
+            self.logger.exception(f"Unexpected error during connection/subscription: {e}")
+            self.call_error_callback(f"Unexpected error during connection/subscription: {e}")
+        finally:
+            self.websocket = None
+
+    async def receive_message(self) -> None:
+        if not self.websocket:
+            self.logger.error("WebSocket not connected for receive message")
+            return
+
+        while self.is_running and self.websocket:
             try:
-                async with websockets.connect(self.websocket_url, ping_interval=20, ping_timeout=10) as ws:
-                    self.websocket = ws
-                    self.logger.info(f"{self.__class__.__name__} WebSocket connected")
-                    self.call_connected_callback()
-                    self.reconnect_attempt = 0
-
-                    symbols = await self.fetch_symbols()
-                    if not symbols:
-                        self.logger.warning("No symbols to subscribe, closing WebSocket")
-                        return
-
-                    await self.subscribe_symbols(symbols)
-
-                    while self.is_running:
-                        try:
-                            message = await asyncio.wait_for(ws.recv(), timeout=1.0)
-                            self.process_message(message)
-                        except asyncio.TimeoutError:
-                            continue
-                        except websockets.exceptions.ConnectionClosedOK:
-                            self.logger.info("WebSocket connection closed")
-                            break
-                        except websockets.exceptions.ConnectionClosed as e:
-                            self.logger.error(f"WebSocket connection closed with error: {e}")
-                            self.call_error_callback(f"WebSocket connection closed with error: {e}")
-                            break
-                        except Exception as e:
-                            self.logger.exception(f"Error receiving/processing WebSocket message: {e}")
-                            self.call_error_callback(f"Error receiving/processing WebSocket message: {e}")
-                            break
-
-            except websockets.exceptions.InvalidURI as e:
-                self.logger.error(f"Invalid WebSocket URI: {e}")
-                self.call_error_callback(f"Invalid WebSocket URI: {e}")
-            except ConnectionRefusedError:
-                self.logger.error("Connection refused. Bybit server might be down or firewall blocking")
-                self.call_error_callback("Connection refused. Bybit server might be down or firewall blocking")
+                message = await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
+                self.process_message(message)
+            except asyncio.TimeoutError:
+                continue
+            except ConnectionClosedOK:
+                self.logger.info("WebSocket connection closed")
+                break
+            except ConnectionClosed as e:
+                self.logger.error(f"WebSocket connection closed with error: {e}")
+                self.call_error_callback(f"WebSocket connection closed with error: {e}")
+                break
             except Exception as e:
-                self.logger.exception(f"Unexpected error in WebSocket loop: {e}")
-                self.call_error_callback(f"Unexpected error in WebSocket loop: {e}")
-            finally:
-                self.websocket = None
+                self.logger.exception(f"Unexpected error during receiving/processing message: {e}")
+                self.call_error_callback(f"Unexpected error during receiving/processing message: {e}")
+                break
 
-        if self.reconnect_attempt >= self.max_reconnect_attempts:
-            self.logger.critical(f"Failed to reconnect after {self.max_reconnect_attempts} attempts")
-            self.call_error_callback(f"Failed to reconnect after {self.max_reconnect_attempts} attempts")
+    async def websocket_loop(self) -> None:
+        while self.is_running and self.reconnect_attempt <= self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
+            await self.connect_and_subscribe()
+
+            if self.is_running:
+                await self.apply_reconnect_delay()
+
+        if self.reconnect_attempt > self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
+            self.logger.critical(f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts")
+            self.call_error_callback(f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts")
 
         self.is_running = False
         self.logger.info("WebSocket loop terminated")
@@ -133,19 +159,20 @@ class BaseExchangeClient(IExchangeClient):
 
     async def start(self) -> None:
         if self.is_running:
-            self.logger.info(f"{self.__class__.__name__} client is already running")
+            self.logger.info("Client is already running")
             return
 
-        self.logger.info(f"Starting {self.__class__.__name__} client...")
+        self.logger.info("Starting client...")
         self.is_running = True
+        self.reconnect_attempt = 0
         self.websocket_task = asyncio.create_task(self.websocket_loop())
 
     async def stop(self) -> None:
         if not self.is_running:
-            self.logger.info(f"{self.__class__.__name__} client is not running")
+            self.logger.info("Client is not running")
             return
 
-        self.logger.info(f"Stopping {self.__class__.__name__} client...")
+        self.logger.info("Stopping client...")
         self.is_running = False
         if self.websocket:
             try:
@@ -169,7 +196,7 @@ class BaseExchangeClient(IExchangeClient):
             except Exception as e:
                 self.logger.error(f"Error waiting for websocket task to stop: {e}")
 
-        self.logger.info(f"{self.__class__.__name__} client stopped")
+        self.logger.info("Client stopped")
 
     def get_data(self, symbol: str | None = None) -> dict[str, PriceData] | PriceData | None:
         if symbol:

@@ -147,7 +147,7 @@ class PriceDataStore:
             profit_percent = (sell_price - buy_price) / buy_price
 
             MAX_ACCEPTABLE_PROFIT_PERCENT = 0.5
-            if profit_percent >= min_profit_percent: # and profit_percent < MAX_ACCEPTABLE_PROFIT_PERCENT:
+            if profit_percent >= min_profit_percent and profit_percent < MAX_ACCEPTABLE_PROFIT_PERCENT:
                 opportunities.append(
                     {
                         "symbol": symbol_name,

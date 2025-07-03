@@ -73,19 +73,19 @@ class BybitClient(BaseExchangeClient):
             subscribe_args.append(f"tickers.{symbol}")
             subscribe_args.append(f"orderbook.1.{symbol}")
 
-        for i in range(0, len(subscribe_args), BYBIT_MAX_ARGS_PER_MESSAGE):
-            chunk = subscribe_args[i : i + BYBIT_MAX_ARGS_PER_MESSAGE]
-            chunk_num = i // BYBIT_MAX_ARGS_PER_MESSAGE + 1
-            subscribe_message = json.dumps({"op": "subscribe", "args": chunk})
+        try:
+            for i in range(0, len(subscribe_args), BYBIT_MAX_ARGS_PER_MESSAGE):
+                chunk = subscribe_args[i : i + BYBIT_MAX_ARGS_PER_MESSAGE]
+                subscribe_message = json.dumps({"op": "subscribe", "args": chunk})
 
-            try:
                 await self.websocket.send(subscribe_message)
-                self.logger.info(f"Sent subscribe for {len(chunk) // 2} symbols in chunk {chunk_num}")
                 # await asyncio.sleep(0.05)
-            except Exception as e:
-                self.logger.error(f"Error sending subscription chunk {chunk_num}: {e}")
-                self.call_error_callback(f"Error sending subscription chunk {chunk_num}: {e}")
-                break
+
+            self.logger.info(f"Sent subscribe for {len(symbols)} symbol")
+                
+        except Exception as e:
+            self.logger.error(f"Error sending bulk subscription: {e}")
+            self.call_error_callback(f"Error sending bulk subscription: {e}")
 
     def process_message(self, message: str) -> None:
         try:
@@ -93,8 +93,8 @@ class BybitClient(BaseExchangeClient):
 
             if message_data.get("op") == "subscribe":
                 if not message_data.get("success", False):
-                    self.logger.warning(f"Subscribe error: {message_data.get('ret_msg', '')}")
-                    self.call_error_callback(f"Subscribe error: {message_data.get('ret_msg', '')}")
+                    self.logger.warning(f"Subscribe error: {message_data.get("ret_msg", "")}")
+                    self.call_error_callback(f"Subscribe error: {message_data.get("ret_msg", "")}")
                 return
 
             if "topic" in message_data and "data" in message_data:

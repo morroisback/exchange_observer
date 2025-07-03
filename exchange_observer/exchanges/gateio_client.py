@@ -104,8 +104,8 @@ class GateioClient(BaseExchangeClient):
 
             if event_type == "subscribe":
                 if item_data.get("status") != "success":
-                    self.logger.warning(f"Subscribe error: {message_data.get('error', '')}")
-                    self.call_error_callback(f"Subscribe error: {message_data.get('error', '')}")
+                    self.logger.warning(f"Subscribe error: {message_data.get("error", "")}")
+                    self.call_error_callback(f"Subscribe error: {message_data.get("error", "")}")
                 return
 
             if event_type == "update" and "channel" in message_data:
