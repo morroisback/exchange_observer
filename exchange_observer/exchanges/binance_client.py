@@ -40,16 +40,10 @@ class BinanceClient(BaseExchangeClient):
                         symbol = s.get("symbol")
                         if s.get("status") == "TRADING" and symbol:
                             active_symbols.append(symbol)
-                            self.data[symbol] = PriceData(
-                                exchange=self.exchange,
-                                symbol=symbol,
-                                base_coin=s.get("baseAsset"),
-                                quote_coin=s.get("quoteAsset"),
-                            )
 
                     self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
                     return active_symbols
-                
+
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")
@@ -91,16 +85,14 @@ class BinanceClient(BaseExchangeClient):
         if not symbol:
             return
 
-        if symbol not in self.data:
-            self.logger.warning(f"Skipping update for {symbol}: not initialized with full coin info")
-
         if event_type == "24hrTicker":
             symbol_price_data = {
-                "last_price": item_data.get("c"),
                 "bid_price": item_data.get("b"),
                 "bid_quantity": item_data.get("B"),
                 "ask_price": item_data.get("a"),
                 "ask_quantity": item_data.get("A"),
             }
-            self.data[symbol].update(symbol_price_data)
-            self.call_data_callback({symbol: self.data[symbol]})
+            price_data = PriceData(exchange=self.exchange, symbol=symbol)
+            price_data.update(symbol_price_data)
+
+            self.call_data_callback(price_data)

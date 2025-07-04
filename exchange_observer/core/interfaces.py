@@ -1,15 +1,9 @@
 from abc import ABC, abstractmethod
 
-from .models import PriceData
-
 
 class IExchangeClient(ABC):
     @abstractmethod
     async def fetch_symbols(self) -> list[str]:
-        pass
-
-    @abstractmethod
-    async def subscribe_symbols(self) -> None:
         pass
 
     @abstractmethod
@@ -18,8 +12,4 @@ class IExchangeClient(ABC):
 
     @abstractmethod
     async def stop(self) -> None:
-        pass
-
-    @abstractmethod
-    def get_data(self, symbol: str | None = None) -> dict[str, PriceData] | PriceData | None:
         pass

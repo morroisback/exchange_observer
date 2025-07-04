@@ -52,7 +52,7 @@ class BaseExchangeClient(IExchangeClient):
         except Exception as e:
             self.logger.error(f"Error in callback function {callback.__name__}: {e}")
 
-    def call_data_callback(self, data: dict[str, PriceData]) -> None:
+    def call_data_callback(self, data: PriceData) -> None:
         if self.on_data_callback:
             asyncio.create_task(self.async_callback(self.on_data_callback, data))
 
@@ -90,8 +90,8 @@ class BaseExchangeClient(IExchangeClient):
         self.websocket = None
 
         try:
-            # async with websockets.connect(self.websocket_url, ping_interval=20, ping_timeout=10) as ws:
-            async with websockets.connect(self.websocket_url) as ws:
+            async with websockets.connect(self.websocket_url, ping_interval=60, ping_timeout=60) as ws:
+            # async with websockets.connect(self.websocket_url) as ws:
                 self.websocket = ws
                 self.logger.info("WebSocket connected")
                 self.call_connected_callback()
@@ -101,7 +101,6 @@ class BaseExchangeClient(IExchangeClient):
                 if not symbols:
                     self.logger.error("No symbols to subscribe")
                     self.call_error_callback("No symbols to subscribe")
-                    self.is_running = False
                     return
 
                 await self.subscribe_symbols(symbols)
@@ -143,7 +142,7 @@ class BaseExchangeClient(IExchangeClient):
                 break
 
     async def websocket_loop(self) -> None:
-        while self.is_running and self.reconnect_attempt <= self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
+        while self.is_running:  # and self.reconnect_attempt <= self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
             await self.connect_and_subscribe()
 
             if self.is_running:
@@ -197,8 +196,3 @@ class BaseExchangeClient(IExchangeClient):
                 self.logger.error(f"Error waiting for websocket task to stop: {e}")
 
         self.logger.info("Client stopped")
-
-    def get_data(self, symbol: str | None = None) -> dict[str, PriceData] | PriceData | None:
-        if symbol:
-            return self.data.get(symbol)
-        return self.data

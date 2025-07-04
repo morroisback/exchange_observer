@@ -10,9 +10,8 @@ from exchange_observer.utils import setup_logging
 async def test_clients() -> None:
     exchange = Exchange.BINANCE
 
-    def handle_data(data: dict[str, PriceData]) -> None:
-        for s, pd in data.items():
-            print(f"{exchange} received data for {s}: Last Price={pd.last_price}")
+    def handle_data(data: PriceData) -> None:
+        print(f"{exchange} received data for {data.symbol}: Last Price={data.last_price}")
 
     def handle_error(msg: str) -> None:
         print(f"{exchange} error: {msg}")
@@ -57,7 +56,7 @@ async def test_manager() -> None:
     print("Manager started. Waiting for data...")
 
     try:
-        await asyncio.sleep(180)
+        await asyncio.sleep(60)
         print("\nStopping manager...")
         await manager.stop()
         await asyncio.sleep(2)

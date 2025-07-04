@@ -9,9 +9,6 @@ class PriceDataStore:
     COLUMNS = [
         "exchange",
         "symbol",
-        "base_coin",
-        "quote_coin",
-        "last_price",
         "bid_price",
         "bid_quantity",
         "ask_price",
@@ -22,9 +19,6 @@ class PriceDataStore:
     DTYPE_MAP = {
         "exchange": str,
         "symbol": str,
-        "base_coin": str,
-        "quote_coin": str,
-        "last_price": float,
         "bid_price": float,
         "bid_quantity": float,
         "ask_price": float,
@@ -41,9 +35,6 @@ class PriceDataStore:
 
         idx = (price_data.exchange.value, price_data.symbol)
         data_to_update = {
-            "base_coin": price_data.base_coin,
-            "quote_coin": price_data.quote_coin,
-            "last_price": price_data.last_price,
             "bid_price": price_data.bid_price,
             "bid_quantity": price_data.bid_quantity,
             "ask_price": price_data.ask_price,
@@ -63,9 +54,6 @@ class PriceDataStore:
             return PriceData(
                 exchange=exchange,
                 symbol=symbol,
-                base_coin=row["base_coin"],
-                quote_coin=row["quote_coin"],
-                last_price=row["last_price"],
                 bid_price=row["bid_price"],
                 bid_quantity=row["bid_quantity"],
                 ask_price=row["ask_price"],
@@ -73,48 +61,6 @@ class PriceDataStore:
             )
         except KeyError:
             return None
-
-    def filter_by_coin(self, coin: str) -> pd.DataFrame:
-        upper_coin = coin.upper()
-        df_reset = self.df.reset_index()
-        filtered_df = df_reset[
-            (df_reset["base_coin"].str.upper() == upper_coin) | (df_reset["quote_coin"].str.upper() == upper_coin)
-        ].set_index(["exchange", "symbol"])
-        return filtered_df.copy()
-
-    def filter_by_exchange_and_coin(self, exchange: Exchange, coin: str) -> pd.DataFrame:
-        upper_coin = coin.upper()
-        df_reset = self.df.reset_index()
-        filtered_df = df_reset[
-            (df_reset["exchange"] == exchange.value)
-            & ((df_reset["base_coin"].str.upper() == upper_coin) | (df_reset["quote_coin"].str.upper() == upper_coin))
-        ].set_index(["exchange", "symbol"])
-        return filtered_df.copy()
-
-    def find_related_symbols(self, target_exchange: Exchange, reference_symbols: list[str]) -> pd.DataFrame:
-        reference_coins = set()
-        for symbol in reference_symbols:
-            try:
-                row = self.df.loc[(target_exchange.value, symbol)]
-                if row.get("base_coin"):
-                    reference_coins.add(str(row["base_coin"].upper()))
-                if row.get("quote_coin"):
-                    reference_coins.add(str(row["quote_coin"].upper()))
-            except KeyError:
-                continue
-
-        if not reference_coins:
-            return pd.DataFrame(columns=self.COLUMNS).set_index(["exchange", "symbol"])
-
-        df_reset = self.df.reset_index()
-        filtered_df = df_reset[
-            (df_reset["exchange"] != target_exchange.value)
-            & (
-                df_reset["base_coin"].str.upper().isin(reference_coins)
-                | df_reset["quote_coin"].str.upper().isin(reference_coins)
-            )
-        ].set_index(["exchange", "symbol"])
-        return filtered_df.copy()
 
     def find_arbitrage_opportunities(
         self, min_profit_percent: float = 0.1, max_data_age_seconds: int = 10

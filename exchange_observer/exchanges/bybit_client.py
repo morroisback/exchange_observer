@@ -40,16 +40,10 @@ class BybitClient(BaseExchangeClient):
                         symbol = s.get("symbol")
                         if s.get("status") == "Trading" and symbol:
                             active_symbols.append(symbol)
-                            self.data[symbol] = PriceData(
-                                exchange=self.exchange,
-                                symbol=symbol,
-                                base_coin=s.get("baseCoin"),
-                                quote_coin=s.get("quoteCoin"),
-                            )
 
                     self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
                     return active_symbols
-                
+
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
             self.call_error_callback(f"HTTP error fetching symbols: {e}")
@@ -70,7 +64,6 @@ class BybitClient(BaseExchangeClient):
 
         subscribe_args = []
         for symbol in symbols:
-            subscribe_args.append(f"tickers.{symbol}")
             subscribe_args.append(f"orderbook.1.{symbol}")
 
         try:
@@ -82,7 +75,7 @@ class BybitClient(BaseExchangeClient):
                 # await asyncio.sleep(0.05)
 
             self.logger.info(f"Sent subscribe for {len(symbols)} symbol")
-                
+
         except Exception as e:
             self.logger.error(f"Error sending bulk subscription: {e}")
             self.call_error_callback(f"Error sending bulk subscription: {e}")
@@ -93,8 +86,8 @@ class BybitClient(BaseExchangeClient):
 
             if message_data.get("op") == "subscribe":
                 if not message_data.get("success", False):
-                    self.logger.warning(f"Subscribe error: {message_data.get("ret_msg", "")}")
-                    self.call_error_callback(f"Subscribe error: {message_data.get("ret_msg", "")}")
+                    self.logger.warning(f"Subscribe error: {message_data.get('ret_msg', '')}")
+                    self.call_error_callback(f"Subscribe error: {message_data.get('ret_msg', '')}")
                 return
 
             if "topic" in message_data and "data" in message_data:
@@ -103,10 +96,7 @@ class BybitClient(BaseExchangeClient):
                 symbol = ""
                 symbol_price_data = {}
 
-                if "tickers" in message_data["topic"]:
-                    symbol = item_data.get("symbol")
-                    symbol_price_data = {"last_price": item_data.get("lastPrice")}
-                elif "orderbook" in message_data["topic"]:
+                if "orderbook" in message_data["topic"]:
                     symbol = item_data.get("s")
                     bids = item_data["b"]
                     asks = item_data["a"]
@@ -119,11 +109,9 @@ class BybitClient(BaseExchangeClient):
                         symbol_price_data["ask_quantity"] = asks[0][1]
 
                 if symbol and symbol_price_data:
-                    if symbol not in self.data:
-                        self.logger.warning(f"Skipping update for {symbol}: not initialized with full coin info")
-                        return
-                    self.data[symbol].update(symbol_price_data)
-                    self.call_data_callback({symbol: self.data[symbol]})
+                    price_data = PriceData(exchange=self.exchange, symbol=symbol)
+                    price_data.update(symbol_price_data)
+                    self.call_data_callback(price_data)
 
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")

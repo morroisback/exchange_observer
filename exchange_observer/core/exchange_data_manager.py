@@ -11,6 +11,23 @@ from .price_data_store import PriceDataStore
 from exchange_observer.exchanges import BinanceClient, BybitClient, GateioClient
 
 
+class ExchangeClientFactory:
+    def __init__(self, *client_args):
+        self.client_args = client_args
+        self.clients_map = {
+            Exchange.BINANCE: BinanceClient,
+            Exchange.BYBIT: BybitClient,
+            Exchange.GATEIO: GateioClient,
+        }
+
+    def create_client(self, exchange: Exchange) -> IExchangeClient | None:
+        client_class = self.clients_map.get(exchange)
+        if client_class:
+            return client_class(*self.client_args)
+        else:
+            return None
+
+
 class ExchangeDataManager:
     def __init__(
         self,
@@ -21,13 +38,19 @@ class ExchangeDataManager:
     ) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.price_data_store = PriceDataStore()
+        self.client_factory = ExchangeClientFactory(
+            self.on_price_data_receive,
+            # self.on_client_error,
+            # self.on_client_connected,
+            # self.on_client_disconnected,
+        )
 
         self.clients: dict[Exchange, IExchangeClient] = {}
         if exchange_to_monitor is None:
             exchange_to_monitor = [Exchange.BINANCE, Exchange.BYBIT, Exchange.GATEIO]
 
         for exchange in exchange_to_monitor:
-            client = self.create_client(exchange)
+            client = self.client_factory.create_client(exchange)
             if client:
                 self.clients[exchange] = client
             else:
@@ -40,9 +63,8 @@ class ExchangeDataManager:
         self.arbitrage_task: asyncio.Task | None = None
         self.is_running = False
 
-    def on_price_data_receive(self, data: dict[str, PriceData]) -> None:
-        for price_data in data.values():
-            self.price_data_store.update_price_data(price_data)
+    def on_price_data_receive(self, data: PriceData) -> None:
+        self.price_data_store.update_price_data(data)
 
     def on_client_error(self, message: str) -> None:
         self.logger.error(f"Client error: {message}")
@@ -52,24 +74,6 @@ class ExchangeDataManager:
 
     def on_client_disconnected(self) -> None:
         self.logger.info("Client disconnected")
-
-    def create_client(self, exchange: Exchange) -> IExchangeClient | None:
-        client_args = [
-            self.on_price_data_receive,
-            # self.on_client_error,
-            # self.on_client_connected,
-            # self.on_client_disconnected,
-        ]
-
-        if exchange == Exchange.BINANCE:
-            return BinanceClient(*client_args)
-        elif exchange == Exchange.BYBIT:
-            return BybitClient(*client_args)
-        elif exchange == Exchange.GATEIO:
-            return GateioClient(*client_args)
-        else:
-            self.logger.error(f"Unsupported exchange type: {exchange}")
-            return None
 
     async def arbitrage_loop(self) -> None:
         while self.is_running:
@@ -97,11 +101,11 @@ class ExchangeDataManager:
 
                         self.logger.info(
                             f"\nSymbol: {symbol} | "
-                            f"Buy on {row["buy_exchange"]}: Ask={row["buy_price"]:.8f} (Bid={buy_bid}, Ask={buy_ask}) | "
-                            f"Sell on {row["sell_exchange"]}: Bid={row["sell_price"]:.8f} (Bid={sell_bid}, Ask={sell_ask}) | "
-                            f"Profit: {row["profit_percent"]:.4f}%"
-                            f" (Buy Data Age: {(current_utc_time - row["last_updated_buy"]).total_seconds():.2f}s, "
-                            f"Sell Data Age: {(current_utc_time - row["last_updated_sell"]).total_seconds():.2f}s)"
+                            f"Buy on {row['buy_exchange']}: Ask={row['buy_price']:.8f} (Bid={buy_bid}, Ask={buy_ask}) | "
+                            f"Sell on {row['sell_exchange']}: Bid={row['sell_price']:.8f} (Bid={sell_bid}, Ask={sell_ask}) | "
+                            f"Profit: {row['profit_percent']:.4f}%"
+                            f" (Buy Data Age: {(current_utc_time - row['last_updated_buy']).total_seconds():.2f}s, "
+                            f"Sell Data Age: {(current_utc_time - row['last_updated_sell']).total_seconds():.2f}s)"
                         )
                 else:
                     self.logger.info("No arbitrage opportunities found.")
