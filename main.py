@@ -1,80 +1,67 @@
 import asyncio
+import logging
+import signal
 
-from exchange_observer.core import ExchangeDataManager, Exchange
-from exchange_observer.core import PriceData
-from exchange_observer.exchanges import BinanceClient, BybitClient, GateioClient
-
+from exchange_observer.core import ArbitrageEngine, ExchangeDataManager, PriceDataStore, Exchange
+from exchange_observer.exchanges import ExchangeClientFactory
 from exchange_observer.utils import setup_logging
 
 
-async def test_clients() -> None:
-    exchange = Exchange.BINANCE
+async def main():
+    """
+    Main function to compose and run the application.
+    """
+    setup_logging(level=logging.INFO)
+    logger = logging.getLogger("main")
 
-    def handle_data(data: PriceData) -> None:
-        print(f"{exchange} received data for {data.symbol}: Last Price={data.last_price}")
+    EXCHANGES_TO_MONITOR = [Exchange.BINANCE, Exchange.BYBIT, Exchange.GATEIO]
+    ARBITRAGE_CHECK_INTERVAL_SECONDS = 5
+    MIN_ARBITRAGE_PROFIT_PERCENT = 0.1
+    MAX_DATA_AGE_SECONDS = 10
 
-    def handle_error(msg: str) -> None:
-        print(f"{exchange} error: {msg}")
+    logger.info("Creating application components...")
 
-    def handle_connected() -> None:
-        print(f"{exchange} client connected!")
+    price_data_store = PriceDataStore()
+    data_manager = ExchangeDataManager(price_data_store)
+    client_factory = ExchangeClientFactory(listener=data_manager)
 
-    def handle_disconnected() -> None:
-        print(f"{exchange} client disconnected!")
+    clients = {exchange.value: client_factory.create_client(exchange) for exchange in EXCHANGES_TO_MONITOR}
+    clients = {name: client for name, client in clients.items() if client is not None}
 
-    client = BinanceClient(
-        on_data_callback=handle_data,
-        on_error_callback=handle_error,
-        on_connected_callback=handle_connected,
-        on_disconnected_callback=handle_disconnected,
+    arbitrage_engine = ArbitrageEngine(
+        price_data_store=price_data_store,
+        arbitrage_check_interval_seconds=ARBITRAGE_CHECK_INTERVAL_SECONDS,
+        min_arbitrage_profit_percent=MIN_ARBITRAGE_PROFIT_PERCENT,
+        max_data_age_seconds=MAX_DATA_AGE_SECONDS,
     )
 
-    await client.start()
-    print(f"{exchange} client started. Waiting for data...")
+    logger.info("Wiring up dependencies...")
+    data_manager.clients = clients
+    data_manager.arbitrage_engine = arbitrage_engine
 
-    try:
-        await asyncio.sleep(60)
-        print(f"\nStopping {exchange} client...")
-        await client.stop()
-        await asyncio.sleep(2)
-    except KeyboardInterrupt:
-        print(f"\nKeyboardInterrupt detected. Stopping {exchange} client...")
-        await client.stop()
+    logger.info("Starting application...")
+    await data_manager.start()
 
-    print("Test client program finished")
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
 
+    def handle_shutdown(sig, frame):
+        logger.info(f"Received shutdown signal {sig}. Triggering graceful shutdown...")
+        if not stop_event.is_set():
+            loop.call_soon_threadsafe(stop_event.set)
 
-async def test_manager() -> None:
-    manager = ExchangeDataManager(
-        exchange_to_monitor=[Exchange.BINANCE, Exchange.BYBIT, Exchange.GATEIO],
-        arbitrage_check_interval_seconds=5,
-        min_arbitrage_profit_percent=0.01,
-        max_data_age_seconds=10
-    )
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
 
-    await manager.start()
-    print("Manager started. Waiting for data...")
+    await stop_event.wait()
 
-    try:
-        await asyncio.sleep(60)
-        print("\nStopping manager...")
-        await manager.stop()
-        await asyncio.sleep(2)
-    except KeyboardInterrupt:
-        print("\nKeyboardInterrupt detected. Stopping manager...")
-    
-    print("Test manager program finished")
-
-
-async def main() -> None:
-    setup_logging()
-
-    # await test_clients()
-    await test_manager()
+    logger.info("Stopping application...")
+    await data_manager.stop()
+    logger.info("Application stopped.")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Program interrupted by user")
+        logging.getLogger("main").info("Application terminated by user.")

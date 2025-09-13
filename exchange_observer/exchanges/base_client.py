@@ -7,27 +7,17 @@ from typing import Any, Callable
 
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, InvalidURI, WebSocketException
 
-from exchange_observer.core.interfaces import IExchangeClient
-from exchange_observer.core.models import PriceData, Exchange
+from exchange_observer.core.interfaces import IExchangeClient, IExchangeClientListener
+from exchange_observer.core import PriceData, Exchange
 
 
 class BaseExchangeClient(IExchangeClient):
     RECONNECT_MAX_DELAY_SECONDS = 60
     RECONNECT_MAX_ATTEMPTS_PER_SESSION = 5
 
-    def __init__(
-        self,
-        on_data_callback: Callable[[dict[str, PriceData]], None] | None = None,
-        on_error_callback: Callable[[str], None] | None = None,
-        on_connected_callback: Callable[[], None] | None = None,
-        on_disconnected_callback: Callable[[], None] | None = None,
-    ):
+    def __init__(self, listener: IExchangeClientListener | None = None):
         super().__init__()
-        self.on_data_callback = on_data_callback
-        self.on_error_callback = on_error_callback
-        self.on_connected_callback = on_connected_callback
-        self.on_disconnected_callback = on_disconnected_callback
-
+        self.listener = listener
         self.logger = logging.getLogger(self.__class__.__name__)
 
         self.reconnect_attempt = 0
@@ -52,21 +42,16 @@ class BaseExchangeClient(IExchangeClient):
         except Exception as e:
             self.logger.error(f"Error in callback function {callback.__name__}: {e}")
 
-    def call_data_callback(self, data: PriceData) -> None:
-        if self.on_data_callback:
-            asyncio.create_task(self.async_callback(self.on_data_callback, data))
+    def notify_listener(self, method_name: str, *args: Any, **kwargs: Any) -> None:
+        if not self.listener:
+            return
 
-    def call_error_callback(self, message: str) -> None:
-        if self.on_error_callback:
-            asyncio.create_task(self.async_callback(self.on_error_callback, message))
-
-    def call_connected_callback(self) -> None:
-        if self.on_connected_callback:
-            asyncio.create_task(self.async_callback(self.on_connected_callback))
-
-    def call_disconnected_callback(self) -> None:
-        if self.on_disconnected_callback:
-            asyncio.create_task(self.async_callback(self.on_disconnected_callback))
+        try:
+            method = getattr(self.listener, method_name)
+            if method:
+                asyncio.create_task(self.async_callback(method, *args, **kwargs))
+        except Exception as e:
+            self.logger.error(f"Error notifying listener method {method_name}: {e}")
 
     @abstractmethod
     async def fetch_symbols(self) -> list[str]:
@@ -91,16 +76,15 @@ class BaseExchangeClient(IExchangeClient):
 
         try:
             async with websockets.connect(self.websocket_url, ping_interval=60, ping_timeout=60) as ws:
-            # async with websockets.connect(self.websocket_url) as ws:
                 self.websocket = ws
                 self.logger.info("WebSocket connected")
-                self.call_connected_callback()
+                self.notify_listener("on_connected")
                 self.reconnect_attempt = 0
 
                 symbols = await self.fetch_symbols()
                 if not symbols:
                     self.logger.error("No symbols to subscribe")
-                    self.call_error_callback("No symbols to subscribe")
+                    self.notify_listener("on_error", "No symbols to subscribe")
                     return
 
                 await self.subscribe_symbols(symbols)
@@ -111,10 +95,10 @@ class BaseExchangeClient(IExchangeClient):
             pass
         except (InvalidURI, WebSocketException, ConnectionRefusedError, OSError) as e:
             self.logger.error(f"Connection/Subscription error: {e}")
-            self.call_error_callback(f"Connection/Subscription error: {e}")
+            self.notify_listener("on_error", f"Connection/Subscription error: {e}")
         except Exception as e:
             self.logger.exception(f"Unexpected error during connection/subscription: {e}")
-            self.call_error_callback(f"Unexpected error during connection/subscription: {e}")
+            self.notify_listener("on_error", f"Unexpected error during connection/subscription: {e}")
         finally:
             self.websocket = None
 
@@ -134,27 +118,30 @@ class BaseExchangeClient(IExchangeClient):
                 break
             except ConnectionClosed as e:
                 self.logger.error(f"WebSocket connection closed with error: {e}")
-                self.call_error_callback(f"WebSocket connection closed with error: {e}")
+                self.notify_listener("on_error", f"WebSocket connection closed with error: {e}")
                 break
             except Exception as e:
                 self.logger.exception(f"Unexpected error during receiving/processing message: {e}")
-                self.call_error_callback(f"Unexpected error during receiving/processing message: {e}")
+                self.notify_listener("on_error", f"Unexpected error during receiving/processing message: {e}")
                 break
 
     async def websocket_loop(self) -> None:
-        while self.is_running:  # and self.reconnect_attempt <= self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
+        while self.is_running:
             await self.connect_and_subscribe()
 
             if self.is_running:
+                self.notify_listener("on_disconnected")
                 await self.apply_reconnect_delay()
 
         if self.reconnect_attempt > self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
             self.logger.critical(f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts")
-            self.call_error_callback(f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts")
+            self.notify_listener(
+                "on_error", f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts"
+            )
 
         self.is_running = False
         self.logger.info("WebSocket loop terminated")
-        self.call_disconnected_callback()
+        self.notify_listener("on_disconnected")
 
     async def start(self) -> None:
         if self.is_running:

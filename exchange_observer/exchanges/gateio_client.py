@@ -2,23 +2,16 @@ import aiohttp
 import json
 import time
 
-from typing import Callable
-
 from .base_client import BaseExchangeClient
+from exchange_observer.core.interfaces import IExchangeClientListener
 from exchange_observer.core.models import PriceData, Exchange
 
 from exchange_observer.config import GATEIO_WEB_SPOT_PUBLIC, GATEIO_REST_SPOT_INFO
 
 
 class GateioClient(BaseExchangeClient):
-    def __init__(
-        self,
-        on_data_callback: Callable[[dict[str, PriceData]], None] | None = None,
-        on_error_callback: Callable[[str], None] | None = None,
-        on_connected_callback: Callable[[], None] | None = None,
-        on_disconnected_callback: Callable[[], None] | None = None,
-    ) -> None:
-        super().__init__(on_data_callback, on_error_callback, on_connected_callback, on_disconnected_callback)
+    def __init__(self, listener: IExchangeClientListener | None = None) -> None:
+        super().__init__(listener)
         self.websocket_url = GATEIO_WEB_SPOT_PUBLIC
         self.exchange = Exchange.GATEIO
 
@@ -32,7 +25,7 @@ class GateioClient(BaseExchangeClient):
 
                     if not symbols_list:
                         self.logger.warning("No symbols found or API response format changed")
-                        self.call_error_callback("No symbols found or API response format changed")
+                        self.notify_listener("on_error", "No symbols found or API response format changed")
                         return []
 
                     active_symbols = []
@@ -40,22 +33,21 @@ class GateioClient(BaseExchangeClient):
                         symbol = s.get("id")
                         if s.get("trade_status") == "tradable" and symbol:
                             active_symbols.append(symbol)
-                            symbol = symbol.replace("_", "")
 
                     self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
                     return active_symbols
 
         except aiohttp.ClientError as e:
             self.logger.error(f"HTTP error fetching symbols: {e}")
-            self.call_error_callback(f"HTTP error fetching symbols: {e}")
+            self.notify_listener("on_error", f"HTTP error fetching symbols: {e}")
             return []
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error fetching symbols: {e}")
-            self.call_error_callback(f"JSON decode error fetching symbols: {e}")
+            self.notify_listener("on_error", f"JSON decode error fetching symbols: {e}")
             return []
         except Exception as e:
             self.logger.exception(f"Unexpected error fetching symbols: {e}")
-            self.call_error_callback(f"Unexpected error fetching symbols: {e}")
+            self.notify_listener("on_error", f"Unexpected error fetching symbols: {e}")
             return []
 
     async def subscribe_symbols(self, symbols: list[str]) -> None:
@@ -75,10 +67,9 @@ class GateioClient(BaseExchangeClient):
         try:
             await self.websocket.send(subscribe_message)
             self.logger.info(f"Sent subscribe for {len(symbols)} symbols")
-            # await asyncio.sleep(0.05)
         except Exception as e:
             self.logger.error(f"Error sending bulk subscription: {e}")
-            self.call_error_callback(f"Error sending bulk subscription: {e}")
+            self.notify_listener("on_error", f"Error sending bulk subscription: {e}")
 
     def process_message(self, message: str) -> None:
         try:
@@ -89,7 +80,7 @@ class GateioClient(BaseExchangeClient):
             if event_type == "subscribe":
                 if item_data.get("status") != "success":
                     self.logger.warning(f"Subscribe error: {message_data.get('error', '')}")
-                    self.call_error_callback(f"Subscribe error: {message_data.get('error', '')}")
+                    self.notify_listener("on_error", f"Subscribe error: {message_data.get('error', '')}")
                 return
 
             if event_type == "update" and "channel" in message_data:
@@ -108,11 +99,11 @@ class GateioClient(BaseExchangeClient):
                 if symbol and symbol_price_data:
                     price_data = PriceData(exchange=self.exchange, symbol=symbol)
                     price_data.update(symbol_price_data)
-                    self.call_data_callback(price_data)
+                    self.notify_listener("on_price_data", price_data)
 
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
-            self.call_error_callback(f"JSON decode error processing message: {e}")
+            self.notify_listener("on_error", f"JSON decode error processing message: {e}")
         except Exception as e:
             self.logger.exception(f"Unexpected error processing message: {e}")
-            self.call_error_callback(f"Unexpected error processing message: {e}")
+            self.notify_listener("on_error", f"Unexpected error processing message: {e}")
