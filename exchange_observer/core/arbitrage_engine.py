@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
+from typing import Callable, Any
 
 from .price_data_store import PriceDataStore
 from .models import Exchange
@@ -14,17 +15,19 @@ class ArbitrageEngine:
         arbitrage_check_interval_seconds: int = 5,
         min_arbitrage_profit_percent: float = 0.1,
         max_data_age_seconds: int = 10,
+        arbitrage_callback: Callable[[dict[str, Any]], None] = None,
     ):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.price_data_store = price_data_store
         self.arbitrage_check_interval_seconds = arbitrage_check_interval_seconds
         self.min_arbitrage_profit_percent = min_arbitrage_profit_percent
         self.max_data_age_seconds = max_data_age_seconds
+        self.arbitrage_callback = arbitrage_callback
 
         self.arbitrage_task: asyncio.Task | None = None
         self.is_running = False
 
-    async def _arbitrage_loop(self) -> None:
+    async def arbitrage_loop(self) -> None:
         while self.is_running:
             start_time = time.time()
             try:
@@ -34,7 +37,7 @@ class ArbitrageEngine:
                 )
 
                 if not opportunities_df.empty:
-                    self.logger.info("\n--- ARBITRAGE OPPORTUNITIES FOUND ---")
+                    # self.logger.info("\n--- ARBITRAGE OPPORTUNITIES FOUND ---")
 
                     for symbol, row in opportunities_df.iterrows():
                         buy_data = self.price_data_store.get_data_for_symbol(Exchange(row["buy_exchange"]), symbol)
@@ -48,14 +51,33 @@ class ArbitrageEngine:
 
                         current_utc_time = datetime.now(timezone.utc)
 
-                        self.logger.info(
-                            f"\nSymbol: {symbol} | "
-                            f"Buy on {row['buy_exchange']}: Ask={row['buy_price']:.8f} (Bid={buy_bid}, Ask={buy_ask}) | "
-                            f"Sell on {row['sell_exchange']}: Bid={row['sell_price']:.8f} (Bid={sell_bid}, Ask={sell_ask}) | "
-                            f"Profit: {row['profit_percent']:.4f}%"
-                            f" (Buy Data Age: {(current_utc_time - row['last_updated_buy']).total_seconds():.2f}s, "
-                            f"Sell Data Age: {(current_utc_time - row['last_updated_sell']).total_seconds():.2f}s)"
-                        )
+                        opportunity_details = {
+                            "symbol": symbol,
+                            "buy_exchange": row["buy_exchange"],
+                            "buy_price": row["buy_price"],
+                            "buy_bid": buy_bid,
+                            "buy_ask": buy_ask,
+                            "sell_exchange": row["sell_exchange"],
+                            "sell_price": row["sell_price"],
+                            "sell_bid": sell_bid,
+                            "sell_ask": sell_ask,
+                            "profit_percent": row["profit_percent"],
+                            "buy_data_age": (current_utc_time - row["last_updated_buy"]).total_seconds(),
+                            "sell_data_age": (current_utc_time - row["last_updated_sell"]).total_seconds(),
+                        }
+
+                        # self.logger.info(
+                        #     f"\nSymbol: {symbol} | "
+                        #     f"Buy on {row['buy_exchange']}: Ask={row['buy_price']:.8f} (Bid={buy_bid}, Ask={buy_ask}) | "
+                        #     f"Sell on {row['sell_exchange']}: Bid={row['sell_price']:.8f} (Bid={sell_bid}, Ask={sell_ask}) | "
+                        #     f"Profit: {row['profit_percent']:.4f}%"
+                        #     f" (Buy Data Age: {(current_utc_time - row['last_updated_buy']).total_seconds():.2f}s, "
+                        #     f"Sell Data Age: {(current_utc_time - row['last_updated_sell']).total_seconds():.2f}s)"
+                        # )
+
+                        if self.arbitrage_callback:
+                            self.arbitrage_callback(opportunity_details)
+
                 else:
                     self.logger.info("No arbitrage opportunities found.")
 
@@ -71,7 +93,7 @@ class ArbitrageEngine:
             return
 
         self.is_running = True
-        self.arbitrage_task = asyncio.create_task(self._arbitrage_loop())
+        self.arbitrage_task = asyncio.create_task(self.arbitrage_loop())
         self.logger.info("Arbitrage detection loop started")
 
     async def stop(self) -> None:

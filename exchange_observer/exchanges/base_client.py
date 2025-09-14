@@ -126,7 +126,7 @@ class BaseExchangeClient(IExchangeClient):
                 break
 
     async def websocket_loop(self) -> None:
-        while self.is_running:
+        while self.is_running:  # and self.reconnect_attempt <= self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
             await self.connect_and_subscribe()
 
             if self.is_running:

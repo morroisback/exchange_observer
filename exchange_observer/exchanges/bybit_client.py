@@ -103,7 +103,7 @@ class BybitClient(BaseExchangeClient):
                 if symbol and symbol_price_data:
                     price_data = PriceData(exchange=self.exchange, symbol=symbol)
                     price_data.update(symbol_price_data)
-                    self.notify_listener("on_price_data", price_data)
+                    self.notify_listener("on_data_received", price_data)
 
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
