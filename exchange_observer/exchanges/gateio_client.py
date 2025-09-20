@@ -6,7 +6,7 @@ from .base_client import BaseExchangeClient
 from exchange_observer.core.interfaces import IExchangeClientListener
 from exchange_observer.core import PriceData, Exchange
 
-from exchange_observer.config import GATEIO_WEB_SPOT_PUBLIC, GATEIO_REST_SPOT_INFO
+from exchange_observer.config import GATEIO_WEB_SPOT_PUBLIC, GATEIO_REST_SPOT_INFO, MAX_ARGS_PER_MESSAGE
 
 
 class GateioClient(BaseExchangeClient):
@@ -55,18 +55,16 @@ class GateioClient(BaseExchangeClient):
             self.logger.error("WebSocket not connected for subscription")
             return
 
-        subscribe_message = json.dumps(
-            {
-                "time": int(time.time()),
-                "channel": "spot.book_ticker",
-                "event": "subscribe",
-                "payload": symbols,
-            }
-        )
-
         try:
-            await self.websocket.send(subscribe_message)
+            for i in range(0, len(symbols), MAX_ARGS_PER_MESSAGE):
+                chunk = symbols[i : i + MAX_ARGS_PER_MESSAGE]
+                subscribe_message = json.dumps(
+                    {"time": int(time.time()), "channel": "spot.book_ticker", "event": "subscribe", "payload": chunk}
+                )
+
+                await self.websocket.send(subscribe_message)
             self.logger.info(f"Sent subscribe for {len(symbols)} symbols")
+
         except Exception as e:
             self.logger.error(f"Error sending bulk subscription: {e}")
             self.notify_listener("on_error", f"Error sending bulk subscription: {e}")

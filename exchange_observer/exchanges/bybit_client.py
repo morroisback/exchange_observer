@@ -5,7 +5,7 @@ from .base_client import BaseExchangeClient
 from exchange_observer.core.interfaces import IExchangeClientListener
 from exchange_observer.core import PriceData, Exchange
 
-from exchange_observer.config import BYBIT_WEB_SPOT_PUBLIC, BYBIT_REST_SPOT_INFO, BYBIT_MAX_ARGS_PER_MESSAGE
+from exchange_observer.config import BYBIT_WEB_SPOT_PUBLIC, BYBIT_REST_SPOT_INFO, MAX_ARGS_PER_MESSAGE
 
 
 class BybitClient(BaseExchangeClient):
@@ -60,8 +60,8 @@ class BybitClient(BaseExchangeClient):
             subscribe_args.append(f"orderbook.1.{symbol}")
 
         try:
-            for i in range(0, len(subscribe_args), BYBIT_MAX_ARGS_PER_MESSAGE):
-                chunk = subscribe_args[i : i + BYBIT_MAX_ARGS_PER_MESSAGE]
+            for i in range(0, len(subscribe_args), MAX_ARGS_PER_MESSAGE):
+                chunk = subscribe_args[i : i + MAX_ARGS_PER_MESSAGE]
                 subscribe_message = json.dumps({"op": "subscribe", "args": chunk})
 
                 await self.websocket.send(subscribe_message)

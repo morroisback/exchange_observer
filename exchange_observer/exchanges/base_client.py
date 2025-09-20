@@ -12,7 +12,7 @@ from exchange_observer.core import PriceData, Exchange
 
 
 class BaseExchangeClient(IExchangeClient):
-    RECONNECT_MAX_DELAY_SECONDS = 60
+    RECONNECT_MAX_DELAY_SECONDS = 120
     RECONNECT_MAX_ATTEMPTS_PER_SESSION = 5
 
     def __init__(self, listener: IExchangeClientListener | None = None):
