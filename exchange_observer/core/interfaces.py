@@ -3,17 +3,19 @@ from abc import ABC, abstractmethod
 from .models import PriceData
 
 
-class IExchangeClient(ABC):
-    @abstractmethod
-    async def fetch_symbols(self) -> list[str]:
-        pass
-
+class IAsyncTask(ABC):
     @abstractmethod
     async def start(self) -> None:
         pass
 
     @abstractmethod
     async def stop(self) -> None:
+        pass
+
+
+class IExchangeClient(IAsyncTask, ABC):
+    @abstractmethod
+    async def fetch_symbols(self) -> list[str]:
         pass
 
 

@@ -6,9 +6,10 @@ from typing import Callable, Any
 
 from .price_data_store import PriceDataStore
 from .models import Exchange
+from .interfaces import IAsyncTask
 
 
-class ArbitrageEngine:
+class ArbitrageEngine(IAsyncTask):
     def __init__(
         self,
         price_data_store: PriceDataStore,

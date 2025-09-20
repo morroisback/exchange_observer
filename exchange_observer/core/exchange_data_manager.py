@@ -2,12 +2,12 @@ import asyncio
 import logging
 
 from .arbitrage_engine import ArbitrageEngine
-from .interfaces import IExchangeClient, IExchangeClientListener
+from .interfaces import IExchangeClient, IExchangeClientListener, IAsyncTask
 from .models import PriceData
 from .price_data_store import PriceDataStore
 
 
-class ExchangeDataManager(IExchangeClientListener):
+class ExchangeDataManager(IExchangeClientListener, IAsyncTask):
     def __init__(self, price_data_store: PriceDataStore):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.price_data_store = price_data_store

@@ -3,7 +3,7 @@ import json
 
 from .base_client import BaseExchangeClient
 from exchange_observer.core.interfaces import IExchangeClientListener
-from exchange_observer.core.models import PriceData, Exchange
+from exchange_observer.core import PriceData, Exchange
 
 from exchange_observer.config import BYBIT_WEB_SPOT_PUBLIC, BYBIT_REST_SPOT_INFO, BYBIT_MAX_ARGS_PER_MESSAGE
 

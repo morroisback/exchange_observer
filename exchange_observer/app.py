@@ -2,10 +2,11 @@ import logging
 from typing import Callable, Any
 
 from .core import ArbitrageEngine, ExchangeDataManager, PriceDataStore, Exchange
+from .core.interfaces import IAsyncTask
 from .exchanges import ExchangeClientFactory
 
 
-class ExchangeObserverApp:
+class ExchangeObserverApp(IAsyncTask):
     def __init__(
         self,
         exchanges_to_monitor: list[Exchange],
