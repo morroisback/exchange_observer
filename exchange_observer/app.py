@@ -1,8 +1,14 @@
 import logging
 
-from typing import Callable, Any
+from typing import Callable
 
-from .core import ArbitrageEngine, ExchangeDataManager, PriceDataStore, Exchange
+from .core import (
+    ArbitrageEngine,
+    ExchangeDataManager,
+    PriceDataStore,
+    Exchange,
+    ArbitrageOpportunity,
+)
 from .core.interfaces import IAsyncTask
 from .exchanges import ExchangeClientFactory
 
@@ -14,7 +20,7 @@ class ExchangeObserverApp(IAsyncTask):
         arbitrage_check_interval_seconds: int = 5,
         min_arbitrage_profit_percent: float = 0.1,
         max_data_age_seconds: int = 10,
-        arbitrage_callback: Callable[[dict[str, Any]], None] = None,
+        arbitrage_callback: Callable[[list[ArbitrageOpportunity]], None] = None,
     ) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.exchanges_to_monitor = exchanges_to_monitor

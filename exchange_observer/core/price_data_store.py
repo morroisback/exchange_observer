@@ -1,8 +1,9 @@
 import pandas as pd
 
 from datetime import datetime, timedelta, timezone
+from itertools import permutations
 
-from .models import PriceData, Exchange
+from .models import ArbitrageOpportunity, PriceData, Exchange
 
 
 class PriceDataStore:
@@ -64,8 +65,8 @@ class PriceDataStore:
 
     def find_arbitrage_opportunities(
         self, min_profit_percent: float = 0.1, max_data_age_seconds: int = 10
-    ) -> pd.DataFrame:
-        opportunities = []
+    ) -> list[ArbitrageOpportunity]:
+        opportunities: list[ArbitrageOpportunity] = []
         current_utc_time = datetime.now(timezone.utc)
 
         df_temp = self.df.reset_index()
@@ -78,47 +79,36 @@ class PriceDataStore:
                 continue
 
             valid_prices_group = group.dropna(subset=["bid_price", "ask_price"])
-            if valid_prices_group.empty:
+            if len(valid_prices_group) < 2:
                 continue
 
-            best_ask_row = valid_prices_group.loc[valid_prices_group["ask_price"].idxmin()]
-            best_bid_row = valid_prices_group.loc[valid_prices_group["bid_price"].idxmax()]
+            for (_, buy_row), (_, sell_row) in permutations(valid_prices_group.iterrows(), 2):
+                buy_price = buy_row["ask_price"]
+                sell_price = sell_row["bid_price"]
 
-            buy_price = best_ask_row["ask_price"]
-            sell_price = best_bid_row["bid_price"]
+                profit_percent = (sell_price - buy_price) / buy_price
 
-            if best_ask_row["exchange"] == best_bid_row["exchange"]:
-                continue
+                MAX_ACCEPTABLE_PROFIT_PERCENT = 0.5
+                if profit_percent >= min_profit_percent and profit_percent < MAX_ACCEPTABLE_PROFIT_PERCENT:
+                    last_updated_buy: datetime = buy_row["timestamp_utc"]
+                    last_updated_sell: datetime = sell_row["timestamp_utc"]
 
-            profit_percent = (sell_price - buy_price) / buy_price
+                    opportunity = ArbitrageOpportunity(
+                        symbol=symbol_name,
+                        buy_exchange=buy_row["exchange"],
+                        buy_price=buy_price,
+                        buy_bid=buy_row["bid_price"],
+                        buy_ask=buy_row["ask_price"],
+                        sell_exchange=sell_row["exchange"],
+                        sell_price=sell_price,
+                        sell_bid=sell_row["bid_price"],
+                        sell_ask=sell_row["ask_price"],
+                        profit_percent=profit_percent * 100,
+                        last_updated_buy=last_updated_buy,
+                        last_updated_sell=last_updated_sell,
+                        buy_data_age=(current_utc_time - last_updated_buy).total_seconds(),
+                        sell_data_age=(current_utc_time - last_updated_sell).total_seconds(),
+                    )
+                    opportunities.append(opportunity)
 
-            MAX_ACCEPTABLE_PROFIT_PERCENT = 0.5
-            if profit_percent >= min_profit_percent and profit_percent < MAX_ACCEPTABLE_PROFIT_PERCENT:
-                opportunities.append(
-                    {
-                        "symbol": symbol_name,
-                        "buy_exchange": best_ask_row["exchange"],
-                        "buy_price": buy_price,
-                        "sell_exchange": best_bid_row["exchange"],
-                        "sell_price": sell_price,
-                        "profit_percent": profit_percent * 100,
-                        "last_updated_buy": best_ask_row["timestamp_utc"],
-                        "last_updated_sell": best_bid_row["timestamp_utc"],
-                    }
-                )
-
-        if opportunities:
-            return pd.DataFrame(opportunities).set_index("symbol")
-        else:
-            return pd.DataFrame(
-                columns=[
-                    "symbol",
-                    "buy_exchange",
-                    "buy_price",
-                    "sell_exchange",
-                    "sell_price",
-                    "profit_percent",
-                    "last_updated_buy",
-                    "last_updated_sell",
-                ]
-            ).set_index("symbol")
+        return opportunities

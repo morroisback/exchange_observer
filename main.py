@@ -1,14 +1,14 @@
 import logging
 import signal
 import threading
-from typing import Any
 
 from exchange_observer.app import ExchangeObserverApp
-from exchange_observer.core import Exchange
+from exchange_observer.core import Exchange, ArbitrageOpportunity
 from exchange_observer.utils import AsyncWorker, setup_logging
 
-def arbitrage_opportunity_callback(opportunity: dict[str, Any]):
-    logging.info(f"CALLBACK: Arbitrage opportunity found: {opportunity}")
+def arbitrage_opportunity_callback(opportunities: list[ArbitrageOpportunity]):
+    for opportunity in opportunities:
+        logging.info(f"CALLBACK: Arbitrage opportunity found: {opportunity}")
 
 
 def main():
