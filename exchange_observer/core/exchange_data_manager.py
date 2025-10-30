@@ -8,14 +8,24 @@ from .price_data_store import PriceDataStore
 
 
 class ExchangeDataManager(IExchangeClientListener, IAsyncTask):
-    def __init__(self, price_data_store: PriceDataStore):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.price_data_store = price_data_store
 
         self.clients: dict[str, IExchangeClient] = {}
+        self.price_data_store: PriceDataStore | None = None
         self.arbitrage_engine: ArbitrageEngine | None = None
 
+        self.is_configured = False
         self.is_running = False
+
+    def configure(
+        self, clients: dict[str, IExchangeClient], price_data_store: PriceDataStore, arbitrage_engine: ArbitrageEngine
+    ) -> None:
+        self.clients = clients
+        self.price_data_store = price_data_store
+        self.arbitrage_engine = arbitrage_engine
+
+        self.is_configured = True
 
     def on_data_received(self, data: PriceData) -> None:
         self.price_data_store.update_price_data(data)
@@ -30,12 +40,12 @@ class ExchangeDataManager(IExchangeClientListener, IAsyncTask):
         self.logger.info("Client disconnected")
 
     async def start(self) -> None:
-        if self.is_running:
-            self.logger.info("ExchangeDataManager is already running")
+        if not self.is_configured:
+            self.logger.error("Cannot start: not configured")
             return
 
-        if not (self.clients and self.arbitrage_engine):
-            self.logger.error("Cannot start: clients or arbitrage engine not set")
+        if self.is_running:
+            self.logger.info("ExchangeDataManager is already running")
             return
 
         self.is_running = True

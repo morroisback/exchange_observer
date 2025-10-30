@@ -15,7 +15,7 @@ class BaseExchangeClient(IExchangeClient):
     RECONNECT_MAX_DELAY_SECONDS = 120
     RECONNECT_MAX_ATTEMPTS_PER_SESSION = 5
 
-    def __init__(self, listener: IExchangeClientListener | None = None):
+    def __init__(self, listener: IExchangeClientListener | None = None) -> None:
         super().__init__()
         self.listener = listener
         self.logger = logging.getLogger(self.__class__.__name__)

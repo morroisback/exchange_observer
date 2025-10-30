@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+
 from datetime import datetime, timezone
 from typing import Callable, Any
 
@@ -17,7 +18,7 @@ class ArbitrageEngine(IAsyncTask):
         min_arbitrage_profit_percent: float = 0.1,
         max_data_age_seconds: int = 10,
         arbitrage_callback: Callable[[dict[str, Any]], None] = None,
-    ):
+    ) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.price_data_store = price_data_store
         self.arbitrage_check_interval_seconds = arbitrage_check_interval_seconds
@@ -38,8 +39,6 @@ class ArbitrageEngine(IAsyncTask):
                 )
 
                 if not opportunities_df.empty:
-                    # self.logger.info("\n--- ARBITRAGE OPPORTUNITIES FOUND ---")
-
                     for symbol, row in opportunities_df.iterrows():
                         buy_data = self.price_data_store.get_data_for_symbol(Exchange(row["buy_exchange"]), symbol)
                         sell_data = self.price_data_store.get_data_for_symbol(Exchange(row["sell_exchange"]), symbol)

@@ -1,12 +1,12 @@
-from exchange_observer.core.interfaces import IExchangeClient, IExchangeClientListener
-from exchange_observer.core import Exchange
 from .binance_client import BinanceClient
 from .bybit_client import BybitClient
 from .gateio_client import GateioClient
+from exchange_observer.core.interfaces import IExchangeClient, IExchangeClientListener
+from exchange_observer.core import Exchange
 
 
 class ExchangeClientFactory:
-    def __init__(self, listener: IExchangeClientListener | None = None):
+    def __init__(self, listener: IExchangeClientListener | None = None) -> None:
         self.listener = listener
         self.clients_map = {
             Exchange.BINANCE: BinanceClient,

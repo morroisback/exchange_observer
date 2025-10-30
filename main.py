@@ -19,11 +19,15 @@ def main():
     worker.start()
 
     EXCHANGES_TO_MONITOR = [Exchange.BINANCE, Exchange.BYBIT, Exchange.GATEIO]
+    ARBITRAGE_CHECK_INTERVAL_SECONDS = 5
     MIN_ARBITRAGE_PROFIT_PERCENT = 0.01
+    MAX_DATA_AGE_SECONDS = 10
 
     app = ExchangeObserverApp(
         exchanges_to_monitor=EXCHANGES_TO_MONITOR,
+        arbitrage_check_interval_seconds=ARBITRAGE_CHECK_INTERVAL_SECONDS,
         min_arbitrage_profit_percent=MIN_ARBITRAGE_PROFIT_PERCENT,
+        max_data_age_seconds=MAX_DATA_AGE_SECONDS,
         arbitrage_callback=arbitrage_opportunity_callback,
     )
 

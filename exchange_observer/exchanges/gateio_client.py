@@ -5,7 +5,6 @@ import time
 from .base_client import BaseExchangeClient
 from exchange_observer.core.interfaces import IExchangeClientListener
 from exchange_observer.core import PriceData, Exchange
-
 from exchange_observer.config import GATEIO_WEB_SPOT_PUBLIC, GATEIO_REST_SPOT_INFO, MAX_ARGS_PER_MESSAGE
 
 
