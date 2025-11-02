@@ -7,6 +7,8 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.data: pd.DataFrame = pd.DataFrame()
+        self.sort_column = -1
+        self.sort_order = Qt.SortOrder.AscendingOrder
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return self.data.shape[0]
@@ -44,6 +46,8 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
     def sort(self, column: int, order: Qt.SortOrder) -> None:
         try:
             column_name = self.data.columns[column]
+            self.sort_column = column
+            self.sort_order = order
             self.layoutAboutToBeChanged.emit()
             self.data.sort_values(by=column_name, ascending=(order == Qt.SortOrder.AscendingOrder), inplace=True)
             self.layoutChanged.emit()
@@ -67,7 +71,7 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
                     "buy_data_age",
                     "sell_data_age",
                 ]
-            ]
+            ].copy()
         else:
             self.data = pd.DataFrame(
                 columns=self.data.columns
@@ -83,4 +87,17 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
                     "sell_data_age",
                 ]
             )
+
+        if self.sort_column != -1:
+            try:
+                column_name = self.data.columns[self.sort_column]
+                self.data.sort_values(
+                    by=column_name,
+                    ascending=(self.sort_order == Qt.SortOrder.AscendingOrder),
+                    inplace=True,
+                )
+            except IndexError:
+                # Reset sorting if column index is out of bounds
+                self.sort_column = -1
+
         self.layoutChanged.emit()

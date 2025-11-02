@@ -193,7 +193,7 @@ class MainWindow(QMainWindow):
         self.cleanup_finished = True
         self.close()
 
-    def closeEvent(self, event: QCloseEvent | None) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
         if self.is_closing:
             if self.cleanup_finished:
                 event.accept()

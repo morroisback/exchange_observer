@@ -26,9 +26,9 @@ def main_console(arbitrage_callback: Callable[[list[ArbitrageOpportunity]], None
     worker.start()
 
     EXCHANGES_TO_MONITOR = [Exchange.BINANCE, Exchange.BYBIT, Exchange.GATEIO]
-    ARBITRAGE_CHECK_INTERVAL_SECONDS = 5
+    ARBITRAGE_CHECK_INTERVAL_SECONDS = 10
     MIN_ARBITRAGE_PROFIT_PERCENT = 0.01
-    MAX_DATA_AGE_SECONDS = 10
+    MAX_DATA_AGE_SECONDS = 60
 
     app = ExchangeObserverApp(
         exchanges_to_monitor=EXCHANGES_TO_MONITOR,
