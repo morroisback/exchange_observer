@@ -41,6 +41,15 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
             return str(self.data.columns[section]).replace("_", " ").title()
         return None
 
+    def sort(self, column: int, order: Qt.SortOrder) -> None:
+        try:
+            column_name = self.data.columns[column]
+            self.layoutAboutToBeChanged.emit()
+            self.data.sort_values(by=column_name, ascending=(order == Qt.SortOrder.AscendingOrder), inplace=True)
+            self.layoutChanged.emit()
+        except IndexError:
+            pass
+
     def update_data(self, new_opportunities: list[dict]) -> None:
         self.layoutAboutToBeChanged.emit()
         if new_opportunities:

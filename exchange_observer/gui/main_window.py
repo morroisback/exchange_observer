@@ -35,6 +35,7 @@ class MainWindow(QMainWindow):
 
         self.controller = AppController(self)
         self.is_closing = False
+        self.cleanup_finished = False
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -150,7 +151,7 @@ class MainWindow(QMainWindow):
 
         self.controller.status_updated.connect(self.statusBar().showMessage)
         self.controller.app_stopped.connect(self.on_app_stopped_ui_update)
-        self.controller.finished.connect(self.close)
+        self.controller.finished.connect(self.on_cleanup_finished)
 
     def set_controls_enabled(self, enabled: bool) -> None:
         self.exchanges_group.setEnabled(enabled)
@@ -167,7 +168,7 @@ class MainWindow(QMainWindow):
         config = {
             "exchanges": exchanges_config,
             "arbitrage_check_interval_seconds": self.update_frequency_spinbox.value(),
-            "min_profit": self.min_profit_spinbox.value() / 100,            
+            "min_profit": self.min_profit_spinbox.value() / 100,
             "max_data_age_seconds": self.data_age_spinbox.value(),
         }
         self.controller.start_app(config)
@@ -188,17 +189,24 @@ class MainWindow(QMainWindow):
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
 
+    def on_cleanup_finished(self) -> None:
+        self.cleanup_finished = True
+        self.close()
+
     def closeEvent(self, event: QCloseEvent | None) -> None:
         if self.is_closing:
-            event.accept()
+            if self.cleanup_finished:
+                event.accept()
+            else:
+                event.ignore()
             return
 
+        self.is_closing = True
         self.statusBar().showMessage("Завершение работы... Пожалуйста, подождите.")
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.set_controls_enabled(False)
 
-        self.is_closing = True
         self.controller.cleanup()
         event.ignore()
 
