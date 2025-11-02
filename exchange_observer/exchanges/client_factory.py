@@ -1,8 +1,7 @@
 from .binance_client import BinanceClient
 from .bybit_client import BybitClient
 from .gateio_client import GateioClient
-from exchange_observer.core.interfaces import IExchangeClient, IExchangeClientListener
-from exchange_observer.core import Exchange
+from exchange_observer.core import Exchange, IExchangeClient, IExchangeClientListener
 
 
 class ExchangeClientFactory:

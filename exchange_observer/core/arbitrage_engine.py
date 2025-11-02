@@ -37,9 +37,11 @@ class ArbitrageEngine(IAsyncTask):
                     max_data_age_seconds=self.max_data_age_seconds,
                 )
 
-                if opportunities and self.arbitrage_callback:
-                        self.arbitrage_callback(opportunities)
+                if self.arbitrage_callback:
+                    self.arbitrage_callback(opportunities)
 
+                if opportunities:
+                    self.logger.info(f"Arbitrage opportunities found: {len(opportunities)} new opportunities")
                 else:
                     self.logger.info("No arbitrage opportunities found.")
 

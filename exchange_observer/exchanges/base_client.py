@@ -7,8 +7,7 @@ from typing import Any, Callable
 
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, InvalidURI, WebSocketException
 
-from exchange_observer.core.interfaces import IExchangeClient, IExchangeClientListener
-from exchange_observer.core import PriceData, Exchange
+from exchange_observer.core import PriceData, Exchange, IExchangeClient, IExchangeClientListener
 
 
 class BaseExchangeClient(IExchangeClient):

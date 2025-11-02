@@ -4,8 +4,7 @@ import json
 from typing import Any
 
 from .base_client import BaseExchangeClient
-from exchange_observer.core.interfaces import IExchangeClientListener
-from exchange_observer.core import PriceData, Exchange
+from exchange_observer.core import PriceData, Exchange, IExchangeClientListener
 from exchange_observer.config import BINANCE_WEB_SPOT_PUBLIC, BINANCE_REST_SPOT_INFO
 
 
@@ -55,7 +54,7 @@ class BinanceClient(BaseExchangeClient):
         if not self.websocket:
             self.logger.error("WebSocket not connected for subscription")
             return
-        
+
         self.logger.info(f"Sent subscribe for {len(symbols)} symbol")
 
     def process_message(self, message: str) -> None:

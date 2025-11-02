@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from itertools import permutations
 
 from .models import ArbitrageOpportunity, PriceData, Exchange
+from exchange_observer.config import MAX_ACCEPTABLE_PROFIT_PERCENT
 
 
 class PriceDataStore:
@@ -70,14 +71,11 @@ class PriceDataStore:
         current_utc_time = datetime.now(timezone.utc)
 
         df_temp = self.df.reset_index()
-        fresh_data_df = df_temp[
+        fresh_data_df: pd.DataFrame = df_temp[
             (current_utc_time - df_temp["timestamp_utc"] <= timedelta(seconds=max_data_age_seconds))
         ]
 
         for symbol_name, group in fresh_data_df.groupby("symbol"):
-            if len(group) < 2:
-                continue
-
             valid_prices_group = group.dropna(subset=["bid_price", "ask_price"])
             if len(valid_prices_group) < 2:
                 continue
@@ -87,8 +85,6 @@ class PriceDataStore:
                 sell_price = sell_row["bid_price"]
 
                 profit_percent = (sell_price - buy_price) / buy_price
-
-                MAX_ACCEPTABLE_PROFIT_PERCENT = 0.5
                 if profit_percent >= min_profit_percent and profit_percent < MAX_ACCEPTABLE_PROFIT_PERCENT:
                     last_updated_buy: datetime = buy_row["timestamp_utc"]
                     last_updated_sell: datetime = sell_row["timestamp_utc"]

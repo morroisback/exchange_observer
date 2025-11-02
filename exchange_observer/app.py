@@ -8,8 +8,8 @@ from .core import (
     PriceDataStore,
     Exchange,
     ArbitrageOpportunity,
+    IAsyncTask,
 )
-from .core.interfaces import IAsyncTask
 from .exchanges import ExchangeClientFactory
 
 

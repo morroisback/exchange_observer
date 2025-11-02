@@ -8,3 +8,5 @@ GATEIO_WEB_SPOT_PUBLIC = "wss://api.gateio.ws/ws/v4/"
 GATEIO_REST_SPOT_INFO = "https://api.gateio.ws/api/v4/spot/currency_pairs"
 
 MAX_ARGS_PER_MESSAGE = 10
+
+MAX_ACCEPTABLE_PROFIT_PERCENT = 0.5
