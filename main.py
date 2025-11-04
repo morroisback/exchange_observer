@@ -62,7 +62,7 @@ def main_console(arbitrage_callback: Callable[[list[ArbitrageOpportunity]], None
 
     worker.stop_loop()
     worker.join()
-    logger.info("Application stopped.")
+    logger.info("Application stopped")
 
 
 def main_gui() -> None:

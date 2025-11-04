@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import StrEnum
 
 
@@ -18,6 +18,7 @@ class PriceData:
     bid_quantity: float | None = None
     ask_price: float | None = None
     ask_quantity: float | None = None
+    timestamp_utc: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def update(self, new_data: dict[str, str]) -> None:
         for key, value in new_data.items():
@@ -30,14 +31,15 @@ class PriceData:
                 else:
                     setattr(self, key, value)
 
-    def to_dict(self) -> dict[str, Exchange | str | float | None]:
+    def to_dict(self) -> dict[str, str | float | None]:
         return {
-            "exchange": self.exchange,
+            "exchange": self.exchange.value,
             "symbol": self.symbol,
             "bid_price": self.bid_price,
             "bid_quantity": self.bid_quantity,
             "ask_price": self.ask_price,
             "ask_quantity": self.ask_quantity,
+            "timestamp_utc": self.timestamp_utc,
         }
 
 

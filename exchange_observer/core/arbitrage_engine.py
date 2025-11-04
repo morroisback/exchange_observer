@@ -32,6 +32,7 @@ class ArbitrageEngine(IAsyncTask):
         while self.is_running:
             start_time = time.time()
             try:
+                self.price_data_store.commit_updates()
                 opportunities = self.price_data_store.find_arbitrage_opportunities(
                     min_profit_percent=self.min_arbitrage_profit_percent,
                     max_data_age_seconds=self.max_data_age_seconds,
@@ -43,7 +44,7 @@ class ArbitrageEngine(IAsyncTask):
                 if opportunities:
                     self.logger.info(f"Arbitrage opportunities found: {len(opportunities)} new opportunities")
                 else:
-                    self.logger.info("No arbitrage opportunities found.")
+                    self.logger.info("No arbitrage opportunities found")
 
             except Exception as e:
                 self.logger.exception(f"Error in arbitrage detection loop: {e}")

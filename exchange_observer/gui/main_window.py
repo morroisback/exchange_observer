@@ -162,7 +162,7 @@ class MainWindow(QMainWindow):
         exchanges_config = {name: cb.isChecked() for name, cb in self.exchange_checkboxes.items()}
 
         if not any(exchanges_config.values()):
-            QMessageBox.warning(self, "Нет выбора", "Пожалуйста, выберите хотя бы одну биржу.")
+            QMessageBox.warning(self, "Нет выбора", "Пожалуйста, выберите хотя бы одну биржу")
             return
 
         config = {
@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
             return
 
         self.is_closing = True
-        self.statusBar().showMessage("Завершение работы... Пожалуйста, подождите.")
+        self.statusBar().showMessage("Завершение работы... Пожалуйста, подождите")
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.set_controls_enabled(False)

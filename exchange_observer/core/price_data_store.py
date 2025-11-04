@@ -31,21 +31,22 @@ class PriceDataStore:
     def __init__(self) -> None:
         self.df = pd.DataFrame(columns=self.COLUMNS).astype(self.DTYPE_MAP)
         self.df.set_index(["exchange", "symbol"], inplace=True)
+        self.pending_updates: dict[tuple[str, str], PriceData] = {}
 
     def update_price_data(self, price_data: PriceData) -> None:
-        current_utc_time = datetime.now(timezone.utc)
+        key = (price_data.exchange.value, price_data.symbol)
+        self.pending_updates[key] = price_data
 
-        idx = (price_data.exchange.value, price_data.symbol)
-        data_to_update = {
-            "bid_price": price_data.bid_price,
-            "bid_quantity": price_data.bid_quantity,
-            "ask_price": price_data.ask_price,
-            "ask_quantity": price_data.ask_quantity,
-            "timestamp_utc": current_utc_time,
-        }
+    def commit_updates(self) -> None:
+        if not self.pending_updates:
+            return
 
-        for col_name, value in data_to_update.items():
-            self.df.loc[idx, col_name] = value
+        new_data = [price_data.to_dict() for price_data in self.pending_updates.values()]
+        update_df = pd.DataFrame(new_data).astype(self.DTYPE_MAP)
+        update_df.set_index(["exchange", "symbol"], inplace=True)
+
+        self.df = update_df.combine_first(self.df)
+        self.pending_updates.clear()
 
     def get_dataframe(self) -> pd.DataFrame:
         return self.df.copy()
@@ -60,6 +61,7 @@ class PriceDataStore:
                 bid_quantity=row["bid_quantity"],
                 ask_price=row["ask_price"],
                 ask_quantity=row["ask_quantity"],
+                timestamp_utc=row["timestamp_utc"],
             )
         except KeyError:
             return None
@@ -72,7 +74,7 @@ class PriceDataStore:
 
         df_temp = self.df.reset_index()
         fresh_data_df: pd.DataFrame = df_temp[
-            (current_utc_time - df_temp["timestamp_utc"] <= timedelta(seconds=max_data_age_seconds))
+            (current_utc_time - df_temp["timestamp_utc"]) <= timedelta(seconds=max_data_age_seconds)
         ]
 
         for symbol_name, group in fresh_data_df.groupby("symbol"):
@@ -83,6 +85,9 @@ class PriceDataStore:
             for (_, buy_row), (_, sell_row) in permutations(valid_prices_group.iterrows(), 2):
                 buy_price = buy_row["ask_price"]
                 sell_price = sell_row["bid_price"]
+
+                if pd.isna(buy_price) or pd.isna(sell_price):
+                    continue
 
                 profit_percent = (sell_price - buy_price) / buy_price
                 if profit_percent >= min_profit_percent and profit_percent < MAX_ACCEPTABLE_PROFIT_PERCENT:

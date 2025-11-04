@@ -13,6 +13,20 @@ class GateioClient(BaseExchangeClient):
         self.websocket_url = GATEIO_WEB_SPOT_PUBLIC
         self.exchange = Exchange.GATEIO
 
+    def is_ping_message(self, message: str) -> bool:
+        try:
+            data: dict = json.loads(message)
+            return data.get("channel") == "spot.ping"
+        except json.JSONDecodeError:
+            return False
+
+    def is_pong_message(self, message: str) -> bool:
+        try:
+            data: dict = json.loads(message)
+            return data.get("channel") == "spot.pong"
+        except json.JSONDecodeError:
+            return False
+
     async def fetch_symbols(self) -> list[str]:
         self.logger.info("Fetching symbols from REST API...")
         try:
@@ -67,11 +81,26 @@ class GateioClient(BaseExchangeClient):
             self.logger.error(f"Error sending bulk subscription: {e}")
             self.notify_listener("on_error", f"Error sending bulk subscription: {e}")
 
-    def process_message(self, message: str) -> None:
+    async def send_ping(self) -> None:
+        if self.websocket:
+            self.logger.info("Sending ping to server")
+            ping_message = json.dumps({"time": int(time.time()), "channel": "spot.ping"})
+            await self.websocket.send(ping_message)
+
+    async def handle_ping(self, message: str) -> None:
+        self.logger.info("Received ping from server, sending pong")
+        if self.websocket:
+            pong_message = json.dumps({"time": int(time.time()), "channel": "spot.pong"})
+            await self.websocket.send(pong_message)
+
+    async def handle_pong(self, message: str) -> None:
+        self.logger.info("Received pong from server")
+
+    async def handle_message(self, message: str) -> None:
         try:
-            message_data = json.loads(message)
+            message_data: dict = json.loads(message)
             event_type = message_data.get("event")
-            item_data = message_data.get("result", {})
+            item_data: dict = message_data.get("result", {})
 
             if event_type == "subscribe":
                 if item_data.get("status") != "success":
@@ -80,23 +109,22 @@ class GateioClient(BaseExchangeClient):
                 return
 
             if event_type == "update" and "channel" in message_data:
-                symbol = ""
-                symbol_price_data = {}
-
                 if "book_ticker" in message_data["channel"]:
                     symbol = item_data.get("s", "").replace("_", "")
-                    symbol_price_data = {
-                        "bid_price": item_data.get("b"),
-                        "bid_quantity": item_data.get("B"),
-                        "ask_price": item_data.get("a"),
-                        "ask_quantity": item_data.get("A"),
-                    }
 
-                if symbol and symbol_price_data:
-                    price_data = PriceData(exchange=self.exchange, symbol=symbol)
-                    price_data.update(symbol_price_data)
-                    self.notify_listener("on_data_received", price_data)
+                    if symbol:
+                        price_data = PriceData(
+                            exchange=self.exchange,
+                            symbol=symbol,
+                            bid_price=float(item_data.get("b")),
+                            bid_quantity=float(item_data.get("B")),
+                            ask_price=float(item_data.get("a")),
+                            ask_quantity=float(item_data.get("A")),
+                        )
+                        self.notify_listener("on_data_received", price_data)
 
+        except (ValueError, TypeError):
+            pass
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
             self.notify_listener("on_error", f"JSON decode error processing message: {e}")

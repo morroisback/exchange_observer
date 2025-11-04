@@ -12,6 +12,12 @@ class BybitClient(BaseExchangeClient):
         self.websocket_url = BYBIT_WEB_SPOT_PUBLIC
         self.exchange = Exchange.BYBIT
 
+    def is_ping_message(self, message: str) -> bool:
+        return isinstance(message, str) and '"op":"ping"' in message
+
+    def is_pong_message(self, message: str) -> bool:
+        return isinstance(message, str) and '"op":"pong"' in message
+
     async def fetch_symbols(self) -> list[str]:
         self.logger.info("Fetching symbols from REST API...")
         try:
@@ -70,9 +76,24 @@ class BybitClient(BaseExchangeClient):
             self.logger.error(f"Error sending bulk subscription: {e}")
             self.notify_listener("on_error", f"Error sending bulk subscription: {e}")
 
-    def process_message(self, message: str) -> None:
+    async def send_ping(self) -> None:
+        if self.websocket:
+            self.logger.info("Sending ping to server")
+            ping_message = json.dumps({"op": "ping"})
+            await self.websocket.send(ping_message)
+
+    async def handle_ping(self, message: str) -> None:
+        self.logger.info("Received ping from server, sending pong")
+        if self.websocket:
+            pong_message = json.dumps({"op": "pong"})
+            await self.websocket.send(pong_message)
+
+    async def handle_pong(self, message: str) -> None:
+        self.logger.info("Received pong from server")
+
+    async def handle_message(self, message: str) -> None:
         try:
-            message_data = json.loads(message)
+            message_data: dict = json.loads(message)
 
             if message_data.get("op") == "subscribe":
                 if not message_data.get("success", False):
@@ -81,28 +102,26 @@ class BybitClient(BaseExchangeClient):
                 return
 
             if "topic" in message_data and "data" in message_data:
-                item_data = message_data["data"]
-
-                symbol = ""
-                symbol_price_data = {}
+                item_data: dict = message_data["data"]
 
                 if "orderbook" in message_data["topic"]:
                     symbol = item_data.get("s")
                     bids = item_data["b"]
                     asks = item_data["a"]
 
-                    if bids and len(bids) > 0:
-                        symbol_price_data["bid_price"] = bids[0][0]
-                        symbol_price_data["bid_quantity"] = bids[0][1]
-                    if asks and len(asks) > 0:
-                        symbol_price_data["ask_price"] = asks[0][0]
-                        symbol_price_data["ask_quantity"] = asks[0][1]
+                    if symbol and bids and asks:
+                        price_data = PriceData(
+                            exchange=self.exchange,
+                            symbol=symbol,
+                            bid_price=float(bids[0][0]),
+                            bid_quantity=float(bids[0][1]),
+                            ask_price=float(asks[0][0]),
+                            ask_quantity=float(asks[0][1]),
+                        )
+                        self.notify_listener("on_data_received", price_data)
 
-                if symbol and symbol_price_data:
-                    price_data = PriceData(exchange=self.exchange, symbol=symbol)
-                    price_data.update(symbol_price_data)
-                    self.notify_listener("on_data_received", price_data)
-
+        except (ValueError, TypeError):
+            pass
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
             self.notify_listener("on_error", f"JSON decode error processing message: {e}")

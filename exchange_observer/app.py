@@ -52,9 +52,9 @@ class ExchangeObserverApp(IAsyncTask):
     async def start(self) -> None:
         self.logger.info("Starting ExchangeObserverApp...")
         await self.data_manager.start()
-        self.logger.info("ExchangeObserverApp started.")
+        self.logger.info("ExchangeObserverApp started")
 
     async def stop(self) -> None:
         self.logger.info("Stopping ExchangeObserverApp...")
         await self.data_manager.stop()
-        self.logger.info("ExchangeObserverApp stopped.")
+        self.logger.info("ExchangeObserverApp stopped")

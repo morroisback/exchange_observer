@@ -97,7 +97,6 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
                     inplace=True,
                 )
             except IndexError:
-                # Reset sorting if column index is out of bounds
                 self.sort_column = -1
 
         self.layoutChanged.emit()

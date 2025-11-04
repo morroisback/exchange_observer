@@ -41,8 +41,8 @@ class AppController(QObject):
             max_data_age_seconds = config.get("max_data_age_seconds", 60)
 
             if not exchanges:
-                self.status_updated.emit("Ошибка: Ни одна биржа не выбрана.")
-                self.logger.warning("Attempted to start with no exchanges selected.")
+                self.status_updated.emit("Ошибка: Ни одна биржа не выбрана")
+                self.logger.warning("Attempted to start with no exchanges selected")
                 return
 
             self.app = ExchangeObserverApp(
@@ -54,8 +54,8 @@ class AppController(QObject):
             )
 
             self.worker.start_task(self.app)
-            self.status_updated.emit("Приложение запущено.")
-            self.logger.info("ExchangeObserverApp task started in worker.")
+            self.status_updated.emit("Приложение запущено")
+            self.logger.info("ExchangeObserverApp task started in worker")
 
         except Exception as e:
             self.logger.exception("Failed to start ExchangeObserverApp")
@@ -63,7 +63,7 @@ class AppController(QObject):
 
     @pyqtSlot()
     def stop_app(self) -> None:
-        self.logger.info("Stop app command received.")
+        self.logger.info("Stop app command received")
         self.status_updated.emit("Остановка...")
 
         if self.app:
@@ -78,18 +78,18 @@ class AppController(QObject):
     def on_app_stopped(self, future: Future) -> None:
         try:
             future.result()
-            self.logger.info("ExchangeObserverApp stop task finished successfully.")
+            self.logger.info("ExchangeObserverApp stop task finished successfully")
         except Exception as e:
             self.logger.error(f"Error during ExchangeObserverApp stop: {e}")
             self.status_updated.emit(f"Ошибка при остановке: {e}")
 
         self.app = None
-        self.status_updated.emit("Приложение остановлено.")
-        self.logger.info("ExchangeObserverApp stop task finished.")
+        self.status_updated.emit("Приложение остановлено")
+        self.logger.info("ExchangeObserverApp stop task finished")
         self.app_stopped.emit()
 
     def cleanup(self) -> None:
-        self.logger.info("Cleanup initiated.")
+        self.logger.info("Cleanup initiated")
         self.is_shutting_down = True
         if self.app:
             self.stop_app()
@@ -101,4 +101,4 @@ class AppController(QObject):
         self.worker.stop_loop()
         self.worker.join()
         self.finished.emit()
-        self.logger.info("Cleanup finished.")
+        self.logger.info("Cleanup finished")

@@ -14,6 +14,12 @@ class BinanceClient(BaseExchangeClient):
         self.websocket_url = BINANCE_WEB_SPOT_PUBLIC
         self.exchange = Exchange.BINANCE
 
+    def is_ping_message(self, message: str) -> bool:
+        return False
+
+    def is_pong_message(self, message: str) -> bool:
+        return False
+
     async def fetch_symbols(self) -> list[str]:
         self.logger.info("Fetching symbols from REST API...")
         try:
@@ -57,9 +63,20 @@ class BinanceClient(BaseExchangeClient):
 
         self.logger.info(f"Sent subscribe for {len(symbols)} symbol")
 
-    def process_message(self, message: str) -> None:
+    async def send_ping(self) -> None:
+        if self.websocket:
+            self.logger.info("Sending ping to server")
+            await self.websocket.ping()
+
+    async def handle_ping(self, message: str) -> None:
+        self.logger.info("Received a ping from the server")
+
+    async def handle_pong(self, message: str) -> None:
+        self.logger.info("Received a pong from the server")
+
+    async def handle_message(self, message: str) -> None:
         try:
-            message_data = json.loads(message)
+            message_data: dict = json.loads(message)
             if isinstance(message_data, list):
                 for item_data in message_data:
                     self.handle_single_item_data(item_data)
@@ -81,13 +98,13 @@ class BinanceClient(BaseExchangeClient):
             return
 
         if event_type == "24hrTicker":
-            symbol_price_data = {
-                "bid_price": item_data.get("b"),
-                "bid_quantity": item_data.get("B"),
-                "ask_price": item_data.get("a"),
-                "ask_quantity": item_data.get("A"),
-            }
-            price_data = PriceData(exchange=self.exchange, symbol=symbol)
-            price_data.update(symbol_price_data)
+            price_data = PriceData(
+                exchange=self.exchange,
+                symbol=symbol,
+                bid_price=float(item_data.get("b")),
+                bid_quantity=float(item_data.get("B")),
+                ask_price=float(item_data.get("a")),
+                ask_quantity=float(item_data.get("A")),
+            )
 
             self.notify_listener("on_data_received", price_data)
