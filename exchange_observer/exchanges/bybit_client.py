@@ -101,24 +101,22 @@ class BybitClient(BaseExchangeClient):
                     self.notify_listener("on_error", f"Subscribe error: {message_data.get('ret_msg', '')}")
                 return
 
-            if "topic" in message_data and "data" in message_data:
+            if "topic" in message_data and "orderbook" in message_data["topic"] and "data" in message_data:
                 item_data: dict = message_data["data"]
+                symbol = item_data.get("s", "")
+                bids = item_data.get("b", "")
+                asks = item_data.get("a", "")
 
-                if "orderbook" in message_data["topic"]:
-                    symbol = item_data.get("s")
-                    bids = item_data["b"]
-                    asks = item_data["a"]
-
-                    if symbol and bids and asks:
-                        price_data = PriceData(
-                            exchange=self.exchange,
-                            symbol=symbol,
-                            bid_price=float(bids[0][0]),
-                            bid_quantity=float(bids[0][1]),
-                            ask_price=float(asks[0][0]),
-                            ask_quantity=float(asks[0][1]),
-                        )
-                        self.notify_listener("on_data_received", price_data)
+                if symbol and bids and asks:
+                    price_data = PriceData(
+                        exchange=self.exchange,
+                        symbol=symbol,
+                        bid_price=float(bids[0][0]),
+                        bid_quantity=float(bids[0][1]),
+                        ask_price=float(asks[0][0]),
+                        ask_quantity=float(asks[0][1]),
+                    )
+                    self.notify_listener("on_data_received", price_data)
 
         except (ValueError, TypeError):
             pass

@@ -83,6 +83,8 @@ class BinanceClient(BaseExchangeClient):
             else:
                 self.handle_single_item_data(message_data)
 
+        except (ValueError, TypeError):
+            pass
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
             self.notify_listener("on_error", f"JSON decode error processing message: {e}")

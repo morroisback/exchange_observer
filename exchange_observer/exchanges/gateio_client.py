@@ -108,20 +108,19 @@ class GateioClient(BaseExchangeClient):
                     self.notify_listener("on_error", f"Subscribe error: {message_data.get('error', '')}")
                 return
 
-            if event_type == "update" and "channel" in message_data:
-                if "book_ticker" in message_data["channel"]:
-                    symbol = item_data.get("s", "").replace("_", "")
+            if event_type == "update" and "channel" in message_data and "book_ticker" in message_data["channel"]:
+                symbol = item_data.get("s", "").replace("_", "")
 
-                    if symbol:
-                        price_data = PriceData(
-                            exchange=self.exchange,
-                            symbol=symbol,
-                            bid_price=float(item_data.get("b")),
-                            bid_quantity=float(item_data.get("B")),
-                            ask_price=float(item_data.get("a")),
-                            ask_quantity=float(item_data.get("A")),
-                        )
-                        self.notify_listener("on_data_received", price_data)
+                if symbol:
+                    price_data = PriceData(
+                        exchange=self.exchange,
+                        symbol=symbol,
+                        bid_price=float(item_data.get("b")),
+                        bid_quantity=float(item_data.get("B")),
+                        ask_price=float(item_data.get("a")),
+                        ask_quantity=float(item_data.get("A")),
+                    )
+                    self.notify_listener("on_data_received", price_data)
 
         except (ValueError, TypeError):
             pass
