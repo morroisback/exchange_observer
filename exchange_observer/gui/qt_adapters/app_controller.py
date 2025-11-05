@@ -40,11 +40,6 @@ class AppController(QObject):
             arbitrage_check_interval_seconds = config.get("arbitrage_check_interval_seconds", 10)
             max_data_age_seconds = config.get("max_data_age_seconds", 60)
 
-            if not exchanges:
-                self.status_updated.emit("Ошибка: Ни одна биржа не выбрана")
-                self.logger.warning("Attempted to start with no exchanges selected")
-                return
-
             self.app = ExchangeObserverApp(
                 exchanges_to_monitor=exchanges,
                 arbitrage_check_interval_seconds=arbitrage_check_interval_seconds,
