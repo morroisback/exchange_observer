@@ -6,10 +6,32 @@ from exchange_observer.gui.gui_models import FilterMode, FilterSettings
 
 
 class ArbitrageOpportunitiesModel(QAbstractTableModel):
+    COLUMNS = [
+        "symbol",
+        "buy_exchange",
+        "sell_exchange",
+        "buy_price",
+        "sell_price",
+        "profit",
+        "buy_data_age",
+        "sell_data_age",
+    ]
+
+    DTYPE_MAP = {
+        "symbol": str,
+        "buy_exchange": str,
+        "sell_exchange": str,
+        "buy_price": float,
+        "sell_price": float,
+        "profit": float,
+        "buy_data_age": float,
+        "sell_data_age": float,
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.raw_data = pd.DataFrame()
-        self.filtered_data = pd.DataFrame()
+        self.raw_data = pd.DataFrame(columns=self.COLUMNS).astype(self.DTYPE_MAP)
+        self.filtered_data = pd.DataFrame(columns=self.COLUMNS).astype(self.DTYPE_MAP)
         self.sort_column = -1
         self.sort_order = Qt.SortOrder.AscendingOrder
         self.filter_mode = FilterMode.ALL
@@ -107,31 +129,9 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
         if new_opportunities:
             df = pd.DataFrame(new_opportunities)
             df.rename(columns={"profit_percent": "profit"}, inplace=True)
-
-            self.raw_data = df[
-                [
-                    "symbol",
-                    "buy_exchange",
-                    "sell_exchange",
-                    "buy_price",
-                    "sell_price",
-                    "profit",
-                    "buy_data_age",
-                    "sell_data_age",
-                ]
-            ].copy()
+            self.raw_data = df.reindex(columns=self.COLUMNS).astype(self.DTYPE_MAP)
         else:
-            empty_cols = [
-                "symbol",
-                "buy_exchange",
-                "sell_exchange",
-                "buy_price",
-                "sell_price",
-                "profit",
-                "buy_data_age",
-                "sell_data_age",
-            ]
-            self.raw_data = pd.DataFrame(columns=empty_cols)
+            self.raw_data = pd.DataFrame(columns=self.COLUMNS).astype(self.DTYPE_MAP)
 
         self.apply_filter()
         self.re_sort()
