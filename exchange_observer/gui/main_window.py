@@ -21,14 +21,17 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCloseEvent
 
 from exchange_observer.core import Exchange
+from exchange_observer.gui.gui_models import FilterMode, FilterSettings, AppSettings
 from .qt_adapters.app_controller import AppController
 
 
 class MainWindow(QMainWindow):
+    filter_settings_changed = pyqtSignal(FilterSettings)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
@@ -215,9 +218,41 @@ class MainWindow(QMainWindow):
         self.whitelist_remove_btn.clicked.connect(self.on_whitelist_remove_clicked)
         self.blacklist_remove_btn.clicked.connect(self.on_blacklist_remove_clicked)
 
+        self.filter_mode_all_radio.clicked.connect(self.emit_filter_settings)
+        self.filter_mode_whitelist_radio.clicked.connect(self.emit_filter_settings)
+        self.filter_mode_btc_radio.clicked.connect(self.emit_filter_settings)
+        self.filter_mode_eth_radio.clicked.connect(self.emit_filter_settings)
+        self.filter_mode_usdt_radio.clicked.connect(self.emit_filter_settings)
+        self.whitelist_list.model().rowsInserted.connect(self.emit_filter_settings)
+        self.whitelist_list.model().rowsRemoved.connect(self.emit_filter_settings)
+        self.blacklist_list.model().rowsInserted.connect(self.emit_filter_settings)
+        self.blacklist_list.model().rowsRemoved.connect(self.emit_filter_settings)
+
+        self.filter_settings_changed.connect(self.controller.opportunities_model.set_filter)
+
         self.controller.status_updated.connect(self.statusBar().showMessage)
         self.controller.app_stopped.connect(self.on_app_stopped_ui_update)
         self.controller.finished.connect(self.on_cleanup_finished)
+
+    def emit_filter_settings(self) -> None:
+        if self.filter_mode_all_radio.isChecked():
+            mode = FilterMode.ALL
+        elif self.filter_mode_whitelist_radio.isChecked():
+            mode = FilterMode.WHITELIST
+        elif self.filter_mode_btc_radio.isChecked():
+            mode = FilterMode.ONLY_BTC
+        elif self.filter_mode_eth_radio.isChecked():
+            mode = FilterMode.ONLY_ETH
+        elif self.filter_mode_usdt_radio.isChecked():
+            mode = FilterMode.ONLY_USDT
+        else:
+            mode = FilterMode.ALL
+
+        whitelist = [self.whitelist_list.item(i).text() for i in range(self.whitelist_list.count())]
+        blacklist = [self.blacklist_list.item(i).text() for i in range(self.blacklist_list.count())]
+
+        settings = FilterSettings(mode, whitelist, blacklist)
+        self.filter_settings_changed.emit(settings)
 
     def on_whitelist_add_clicked(self) -> None:
         dialog = QInputDialog(self)
@@ -259,22 +294,22 @@ class MainWindow(QMainWindow):
 
     def set_controls_enabled(self, enabled: bool) -> None:
         self.exchanges_group.setEnabled(enabled)
-        self.filters_group.setEnabled(enabled)
         self.params_group.setEnabled(enabled)
 
     def on_start_clicked(self) -> None:
         exchanges_config = {name: cb.isChecked() for name, cb in self.exchange_checkboxes.items()}
 
-        if not any(exchanges_config.values()):
-            QMessageBox.warning(self, "Нет выбора", "Пожалуйста, выберите хотя бы одну биржу")
+        if sum(exchanges_config.values()) < 2:
+            QMessageBox.warning(self, "Недостаточно бирж", "Для арбитража необходимо выбрать хотя бы 2 биржи.")
             return
 
-        config = {
-            "exchanges": exchanges_config,
-            "arbitrage_check_interval_seconds": self.update_frequency_spinbox.value(),
-            "min_profit": self.min_profit_spinbox.value() / 100,
-            "max_data_age_seconds": self.data_age_spinbox.value(),
-        }
+        config = AppSettings(
+            exchanges_config,
+            self.update_frequency_spinbox.value(),
+            self.min_profit_spinbox.value() / 100,
+            self.data_age_spinbox.value(),
+        )
+
         self.controller.start_app(config)
         self.set_controls_enabled(False)
         self.start_btn.setEnabled(False)

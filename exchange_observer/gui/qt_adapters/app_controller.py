@@ -7,6 +7,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from exchange_observer.app import ExchangeObserverApp
 from exchange_observer.core import Exchange, ArbitrageOpportunity
 from exchange_observer.utils import AsyncWorker
+from exchange_observer.gui.gui_models import AppSettings
 from .arbitrage_model import ArbitrageOpportunitiesModel
 
 
@@ -30,15 +31,15 @@ class AppController(QObject):
         self.opportunities_model.update_data([opp.to_dict() for opp in opportunities])
 
     @pyqtSlot(dict)
-    def start_app(self, config: dict[str, int | float | dict]) -> None:
+    def start_app(self, config: AppSettings) -> None:
         self.logger.info("Start app command received with config: %s", config)
         self.status_updated.emit("Запуск...")
 
         try:
-            exchanges = [Exchange(name) for name, checked in config.get("exchanges", {}).items() if checked]
-            min_profit = config.get("min_profit", 0.1)
-            arbitrage_check_interval_seconds = config.get("arbitrage_check_interval_seconds", 10)
-            max_data_age_seconds = config.get("max_data_age_seconds", 60)
+            exchanges = [Exchange(name) for name, checked in config.exchanges.items() if checked]
+            min_profit = config.min_arbitrage_profit_percent
+            arbitrage_check_interval_seconds = config.arbitrage_check_interval_seconds
+            max_data_age_seconds = config.max_data_age_seconds
 
             self.app = ExchangeObserverApp(
                 exchanges_to_monitor=exchanges,

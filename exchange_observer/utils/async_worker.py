@@ -14,7 +14,10 @@ class AsyncWorker(threading.Thread):
     def run(self) -> None:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
+        try:
+            self.loop.run_forever()
+        finally:
+            self.loop.close()
 
     def start_task(self, task: IAsyncTask) -> Future | None:
         if self.loop:
