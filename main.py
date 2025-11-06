@@ -7,10 +7,10 @@ from typing import Callable
 
 from PyQt6.QtWidgets import QApplication
 
-from exchange_observer import ExchangeObserverApp
 from exchange_observer.core import Exchange, ArbitrageOpportunity
 from exchange_observer.utils import AsyncWorker, setup_logging
 
+from exchange_observer import ExchangeObserverApp
 from exchange_observer import MainWindow
 
 

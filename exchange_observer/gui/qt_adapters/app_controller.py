@@ -15,6 +15,9 @@ class AppController(QObject):
     status_updated = pyqtSignal(str)
     app_stopped = pyqtSignal()
     finished = pyqtSignal()
+    exchange_connected = pyqtSignal(str)
+    exchange_disconnected = pyqtSignal(str)
+    exchange_error = pyqtSignal(str, str)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -29,6 +32,15 @@ class AppController(QObject):
 
     def arbitrage_callback(self, opportunities: list[ArbitrageOpportunity]) -> None:
         self.opportunities_model.update_data([opp.to_dict() for opp in opportunities])
+
+    def on_exchange_connected(self, exchange: Exchange) -> None:
+        self.exchange_connected.emit(exchange.value)
+
+    def on_exchange_disconnected(self, exchange: Exchange) -> None:
+        self.exchange_disconnected.emit(exchange.value)
+
+    def on_exchange_error(self, exchange: Exchange, error: str) -> None:
+        self.exchange_error.emit(exchange.value, error)
 
     @pyqtSlot(dict)
     def start_app(self, config: AppSettings) -> None:
@@ -47,6 +59,9 @@ class AppController(QObject):
                 min_arbitrage_profit_percent=min_profit,
                 max_data_age_seconds=max_data_age_seconds,
                 arbitrage_callback=self.arbitrage_callback,
+                connected_callback=self.on_exchange_connected,
+                disconnected_callback=self.on_exchange_disconnected,
+                error_callback=self.on_exchange_error,
             )
 
             self.worker.start_task(self.app)

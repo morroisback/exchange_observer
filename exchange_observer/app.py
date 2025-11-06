@@ -30,7 +30,6 @@ class ExchangeObserverApp(IAsyncTask):
         self.arbitrage_check_interval_seconds = arbitrage_check_interval_seconds
         self.min_arbitrage_profit_percent = min_arbitrage_profit_percent
         self.max_data_age_seconds = max_data_age_seconds
-        self.arbitrage_callback = arbitrage_callback
 
         self.data_manager = ExchangeDataManager(
             connected_callback=connected_callback,
@@ -49,7 +48,7 @@ class ExchangeObserverApp(IAsyncTask):
             arbitrage_check_interval_seconds=self.arbitrage_check_interval_seconds,
             min_arbitrage_profit_percent=self.min_arbitrage_profit_percent,
             max_data_age_seconds=self.max_data_age_seconds,
-            arbitrage_callback=self.arbitrage_callback,
+            arbitrage_callback=arbitrage_callback,
         )
 
         self.data_manager.configure(

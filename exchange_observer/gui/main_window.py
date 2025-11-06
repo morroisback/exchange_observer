@@ -79,10 +79,12 @@ class MainWindow(QMainWindow):
         exchanges_layout = QVBoxLayout()
 
         self.exchange_checkboxes: dict[str, QCheckBox] = {}
+        self.exchange_checkboxes_style: dict[str, str] = {}
         for exchange in Exchange:
             if exchange != Exchange.NONE:
                 checkbox = QCheckBox(exchange.value.title())
                 self.exchange_checkboxes[exchange.value] = checkbox
+                self.exchange_checkboxes_style[exchange.value] = checkbox.styleSheet()
                 exchanges_layout.addWidget(checkbox)
         exchanges_layout.addStretch()
         exchanges_offset_layout.addLayout(exchanges_layout)
@@ -230,6 +232,10 @@ class MainWindow(QMainWindow):
 
         self.filter_settings_changed.connect(self.controller.opportunities_model.set_filter)
 
+        self.controller.exchange_connected.connect(self.update_exchange_status_connected)
+        self.controller.exchange_disconnected.connect(self.update_exchange_status_disconnected)
+        self.controller.exchange_error.connect(self.update_exchange_status_error)
+
         self.controller.status_updated.connect(self.statusBar().showMessage)
         self.controller.app_stopped.connect(self.on_app_stopped_ui_update)
         self.controller.finished.connect(self.on_cleanup_finished)
@@ -321,12 +327,30 @@ class MainWindow(QMainWindow):
 
     def on_app_stopped_ui_update(self) -> None:
         self.controller.opportunities_model.update_data([])
+        for exchange_name, checkbox in self.exchange_checkboxes.items():
+            checkbox.setStyleSheet(self.exchange_checkboxes_style[exchange_name])
+
         if self.is_closing:
             self.controller.finalize_shutdown()
         else:
             self.set_controls_enabled(True)
             self.start_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
+
+    def update_exchange_status_connected(self, exchange_name: str) -> None:
+        checkbox = self.exchange_checkboxes.get(exchange_name)
+        if checkbox:
+            checkbox.setStyleSheet("color: green")
+
+    def update_exchange_status_disconnected(self, exchange_name: str) -> None:
+        checkbox = self.exchange_checkboxes.get(exchange_name)
+        if checkbox:
+            checkbox.setStyleSheet("color: yellow")
+
+    def update_exchange_status_error(self, exchange_name: str, message: str) -> None:
+        checkbox = self.exchange_checkboxes.get(exchange_name)
+        if checkbox:
+            checkbox.setStyleSheet("color: red")
 
     def on_cleanup_finished(self) -> None:
         self.cleanup_finished = True

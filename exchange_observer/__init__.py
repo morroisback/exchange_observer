@@ -1,5 +1,5 @@
 from .app import ExchangeObserverApp
-from .gui.main_window import MainWindow
+from .gui import MainWindow
 
 
 __all__ = [

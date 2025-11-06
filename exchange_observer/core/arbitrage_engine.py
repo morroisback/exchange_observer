@@ -38,6 +38,12 @@ class ArbitrageEngine(IAsyncTask):
                     max_data_age_seconds=self.max_data_age_seconds,
                 )
 
+                # opportunities = await asyncio.to_thread(
+                #     self.price_data_store.find_arbitrage_opportunities,
+                #     self.min_arbitrage_profit_percent,
+                #     self.max_data_age_seconds,
+                # )
+
                 if self.arbitrage_callback:
                     self.arbitrage_callback(opportunities)
 
