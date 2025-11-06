@@ -26,7 +26,7 @@ from PyQt6.QtGui import QCloseEvent
 
 from exchange_observer.core import Exchange
 from exchange_observer.gui.gui_models import FilterMode, FilterSettings, AppSettings
-from .qt_adapters.app_controller import AppController
+from .qt_adapters import AppController
 
 
 class MainWindow(QMainWindow):

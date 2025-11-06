@@ -1,16 +1,18 @@
 import asyncio
+import json
 import logging
 import websockets
 
-from abc import abstractmethod
+import aiohttp
+from abc import abstractmethod, ABC
 from typing import Any, Callable
 
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, InvalidURI, WebSocketException
 
-from exchange_observer.core import PriceData, Exchange, IExchangeClient, IExchangeClientListener
+from exchange_observer.core import Exchange, IAsyncTask, IExchangeClientListener
 
 
-class BaseExchangeClient(IExchangeClient):
+class BaseExchangeClient(IAsyncTask, ABC):
     RECONNECT_MAX_DELAY_SECONDS = 120
     RECONNECT_MAX_ATTEMPTS_PER_SESSION = 5
     PING_INTERVAL_SECONDS = 20
@@ -27,28 +29,20 @@ class BaseExchangeClient(IExchangeClient):
         self.ping_task: asyncio.Task | None = None
         self.is_running = False
 
-        self.data: dict[str, PriceData] = {}
-        self.websocket_url: str = ""
-        self.exchange: Exchange = Exchange.NONE
+    @property
+    @abstractmethod
+    def exchange(self) -> Exchange:
+        pass
 
-    async def async_callback(self, callback: Callable, *args: Any, **kwargs: Any) -> None:
-        try:
-            if asyncio.iscoroutinefunction(callback):
-                await callback(*args, **kwargs)
-            else:
-                callback(*args, **kwargs)
-        except Exception as e:
-            self.logger.error(f"Error in callback function {callback.__name__}: {e}")
+    @property
+    @abstractmethod
+    def websocket_url(self) -> str:
+        pass
 
-    def notify_listener(self, method_name: str, *args: Any, **kwargs: Any) -> None:
-        if not self.listener:
-            return
-        try:
-            method = getattr(self.listener, method_name)
-            if method:
-                asyncio.create_task(self.async_callback(method, *args, **kwargs))
-        except Exception as e:
-            self.logger.error(f"Error notifying listener method {method_name}: {e}")
+    @property
+    @abstractmethod
+    def rest_api_url(self) -> str:
+        pass
 
     @abstractmethod
     def is_ping_message(self, message: str) -> bool:
@@ -59,7 +53,7 @@ class BaseExchangeClient(IExchangeClient):
         pass
 
     @abstractmethod
-    async def fetch_symbols(self) -> list[str]:
+    def parse_symbols(self, data: dict | list[dict]) -> list[str]:
         pass
 
     @abstractmethod
@@ -82,6 +76,46 @@ class BaseExchangeClient(IExchangeClient):
     async def handle_message(self, message: str) -> None:
         pass
 
+    async def async_callback(self, callback: Callable, *args: Any, **kwargs: Any) -> None:
+        try:
+            if asyncio.iscoroutinefunction(callback):
+                await callback(*args, **kwargs)
+            else:
+                callback(*args, **kwargs)
+        except Exception as e:
+            self.logger.error(f"Error in callback function {callback.__name__}: {e}")
+
+    def notify_listener(self, method_name: str, *args: Any, **kwargs: Any) -> None:
+        if not self.listener:
+            return
+        try:
+            method = getattr(self.listener, method_name)
+            if method:
+                asyncio.create_task(self.async_callback(method, *args, **kwargs))
+        except Exception as e:
+            self.logger.error(f"Error notifying listener method {method_name}: {e}")
+
+    async def fetch_symbols(self) -> list[str]:
+        self.logger.info("Fetching symbols from REST API...")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.rest_api_url) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+
+                    return self.parse_symbols(data)
+        except aiohttp.ClientError as e:
+            self.logger.error(f"HTTP error fetching from {self.rest_api_url}: {e}")
+            self.notify_listener("on_error", self.exchange, f"HTTP error fetching from {self.rest_api_url}: {e}")
+        except json.JSONDecodeError as e:
+            self.logger.error(f"JSON decode error fetching from {self.rest_api_url}: {e}")
+            self.notify_listener("on_error", self.exchange, f"JSON decode error fetching from {self.rest_api_url}: {e}")
+        except Exception as e:
+            self.logger.exception(f"Unexpected error fetching from {self.rest_api_url}: {e}")
+            self.notify_listener("on_error", self.exchange, f"Unexpected error fetching from {self.rest_api_url}: {e}")
+
+        return []
+
     async def ping_loop(self) -> None:
         if not self.websocket:
             self.logger.error("WebSocket not connected for ping")
@@ -96,11 +130,13 @@ class BaseExchangeClient(IExchangeClient):
                 break
             except ConnectionClosed as e:
                 self.logger.error(f"WebSocket connection closed during ping with error: {e}")
-                self.notify_listener("on_error", f"WebSocket connection closed during ping with error: {e}")
+                self.notify_listener(
+                    "on_error", self.exchange, f"WebSocket connection closed during ping with error: {e}"
+                )
                 break
             except Exception as e:
                 self.logger.exception(f"Unexpected error during ping: {e}")
-                self.notify_listener("on_error", f"Unexpected error during ping: {e}")
+                self.notify_listener("on_error", self.exchange, f"Unexpected error during ping: {e}")
                 break
 
     async def handle_message_loop(self) -> None:
@@ -124,11 +160,13 @@ class BaseExchangeClient(IExchangeClient):
                 break
             except ConnectionClosed as e:
                 self.logger.error(f"WebSocket connection closed during handle message with error: {e}")
-                self.notify_listener("on_error", f"WebSocket connection closed during handle message with error: {e}")
+                self.notify_listener(
+                    "on_error", self.exchange, f"WebSocket connection closed during handle message with error: {e}"
+                )
                 break
             except Exception as e:
                 self.logger.exception(f"Unexpected error during handle message: {e}")
-                self.notify_listener("on_error", f"Unexpected error during handle message: {e}")
+                self.notify_listener("on_error", self.exchange, f"Unexpected error during handle message: {e}")
                 break
 
     async def apply_reconnect_delay(self) -> None:
@@ -143,15 +181,17 @@ class BaseExchangeClient(IExchangeClient):
             async with websockets.connect(self.websocket_url, ping_interval=None, ping_timeout=None) as ws:
                 self.websocket = ws
                 self.logger.info("WebSocket connected")
-                self.notify_listener("on_connected")
+                self.notify_listener("on_connected", self.exchange)
                 self.reconnect_attempt = 0
 
                 self.ping_task = asyncio.create_task(self.ping_loop())
 
                 symbols = await self.fetch_symbols()
+                self.logger.info(f"Found {len(symbols)} active symbols with coin info")
+
                 if not symbols:
                     self.logger.error("No symbols to subscribe")
-                    self.notify_listener("on_error", "No symbols to subscribe")
+                    self.notify_listener("on_error", self.exchange, "No symbols to subscribe")
                     return
 
                 await self.subscribe_symbols(symbols)
@@ -162,10 +202,10 @@ class BaseExchangeClient(IExchangeClient):
             pass
         except (InvalidURI, WebSocketException, ConnectionRefusedError, OSError) as e:
             self.logger.error(f"Websocket session error: {e}")
-            self.notify_listener("on_error", f"Websocket session  error: {e}")
+            self.notify_listener("on_error", self.exchange, f"Websocket session  error: {e}")
         except Exception as e:
             self.logger.exception(f"Unexpected error during websocket session : {e}")
-            self.notify_listener("on_error", f"Unexpected error during websocket session : {e}")
+            self.notify_listener("on_error", self.exchange, f"Unexpected error during websocket session : {e}")
         finally:
             if self.ping_task and not self.ping_task.done():
                 self.ping_task.cancel()
@@ -177,18 +217,20 @@ class BaseExchangeClient(IExchangeClient):
             await self.run_websocket_session()
 
             if self.is_running:
-                self.notify_listener("on_disconnected")
+                self.notify_listener("on_disconnected", self.exchange)
                 await self.apply_reconnect_delay()
 
         if self.reconnect_attempt > self.RECONNECT_MAX_ATTEMPTS_PER_SESSION:
             self.logger.critical(f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts")
             self.notify_listener(
-                "on_error", f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts"
+                "on_error",
+                self.exchange,
+                f"Failed to reconnect after {self.RECONNECT_MAX_ATTEMPTS_PER_SESSION} attempts",
             )
 
         self.is_running = False
         self.logger.info("WebSocket loop terminated")
-        self.notify_listener("on_disconnected")
+        self.notify_listener("on_disconnected", self.exchange)
 
     async def start(self) -> None:
         if self.is_running:

@@ -21,6 +21,9 @@ class ExchangeObserverApp(IAsyncTask):
         min_arbitrage_profit_percent: float = 0.1,
         max_data_age_seconds: int = 10,
         arbitrage_callback: Callable[[list[ArbitrageOpportunity]], None] = None,
+        connected_callback: Callable[[Exchange], None] = None,
+        disconnected_callback: Callable[[Exchange], None] = None,
+        error_callback: Callable[[Exchange, str], None] = None,
     ) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.exchanges_to_monitor = exchanges_to_monitor
@@ -29,7 +32,11 @@ class ExchangeObserverApp(IAsyncTask):
         self.max_data_age_seconds = max_data_age_seconds
         self.arbitrage_callback = arbitrage_callback
 
-        self.data_manager = ExchangeDataManager()
+        self.data_manager = ExchangeDataManager(
+            connected_callback=connected_callback,
+            disconnected_callback=disconnected_callback,
+            error_callback=error_callback,
+        )
         self.client_factory = ExchangeClientFactory(listener=self.data_manager)
         self.clients = {
             exchange.value: self.client_factory.create_client(exchange) for exchange in self.exchanges_to_monitor

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from .models import PriceData
+from .models import PriceData, Exchange
 
 
 class IAsyncTask(ABC):
@@ -13,25 +13,19 @@ class IAsyncTask(ABC):
         pass
 
 
-class IExchangeClient(IAsyncTask, ABC):
-    @abstractmethod
-    async def fetch_symbols(self) -> list[str]:
-        pass
-
-
 class IExchangeClientListener(ABC):
     @abstractmethod
     def on_data_received(self, data: PriceData) -> None:
         pass
 
     @abstractmethod
-    def on_error(self, message: str) -> None:
+    def on_error(self, exchange: Exchange, message: str) -> None:
         pass
 
     @abstractmethod
-    def on_connected(self) -> None:
+    def on_connected(self, exchange: Exchange) -> None:
         pass
 
     @abstractmethod
-    def on_disconnected(self) -> None:
+    def on_disconnected(self, exchange: Exchange) -> None:
         pass

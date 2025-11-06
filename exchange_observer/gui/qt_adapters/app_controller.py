@@ -4,7 +4,7 @@ from concurrent.futures import Future
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from exchange_observer.app import ExchangeObserverApp
+from exchange_observer import ExchangeObserverApp
 from exchange_observer.core import Exchange, ArbitrageOpportunity
 from exchange_observer.utils import AsyncWorker
 from exchange_observer.gui.gui_models import AppSettings

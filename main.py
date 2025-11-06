@@ -7,11 +7,11 @@ from typing import Callable
 
 from PyQt6.QtWidgets import QApplication
 
-from exchange_observer.app import ExchangeObserverApp
+from exchange_observer import ExchangeObserverApp
 from exchange_observer.core import Exchange, ArbitrageOpportunity
 from exchange_observer.utils import AsyncWorker, setup_logging
 
-from exchange_observer.gui.main_window import MainWindow
+from exchange_observer import MainWindow
 
 
 def arbitrage_opportunity_callback(opportunities: list[ArbitrageOpportunity]) -> None:

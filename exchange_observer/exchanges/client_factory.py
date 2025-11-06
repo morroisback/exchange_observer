@@ -1,7 +1,7 @@
 from .binance_client import BinanceClient
 from .bybit_client import BybitClient
 from .gateio_client import GateioClient
-from exchange_observer.core import Exchange, IExchangeClient, IExchangeClientListener
+from exchange_observer.core import Exchange, IAsyncTask, IExchangeClientListener
 
 
 class ExchangeClientFactory:
@@ -13,7 +13,7 @@ class ExchangeClientFactory:
             Exchange.GATEIO: GateioClient,
         }
 
-    def create_client(self, exchange: Exchange) -> IExchangeClient | None:
+    def create_client(self, exchange: Exchange) -> IAsyncTask | None:
         client_class = self.clients_map.get(exchange)
         if client_class:
             return client_class(self.listener)

@@ -1,4 +1,3 @@
-import aiohttp
 import json
 
 from typing import Any
@@ -11,8 +10,18 @@ from exchange_observer.config import BINANCE_WEB_SPOT_PUBLIC, BINANCE_REST_SPOT_
 class BinanceClient(BaseExchangeClient):
     def __init__(self, listener: IExchangeClientListener | None = None) -> None:
         super().__init__(listener)
-        self.websocket_url = BINANCE_WEB_SPOT_PUBLIC
-        self.exchange = Exchange.BINANCE
+
+    @property
+    def exchange(self) -> Exchange:
+        return Exchange.BINANCE
+
+    @property
+    def websocket_url(self) -> str:
+        return BINANCE_WEB_SPOT_PUBLIC
+
+    @property
+    def rest_api_url(self) -> str:
+        return BINANCE_REST_SPOT_INFO
 
     def is_ping_message(self, message: str) -> bool:
         return False
@@ -20,41 +29,14 @@ class BinanceClient(BaseExchangeClient):
     def is_pong_message(self, message: str) -> bool:
         return False
 
-    async def fetch_symbols(self) -> list[str]:
-        self.logger.info("Fetching symbols from REST API...")
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(BINANCE_REST_SPOT_INFO) as response:
-                    response.raise_for_status()
-                    data = await response.json()
-
-                    symbols_list = data.get("symbols", [])
-                    if not symbols_list:
-                        self.logger.warning("No symbols found or API response format changed")
-                        self.notify_listener("on_error", "No symbols found or API response format changed")
-                        return []
-
-                    active_symbols = []
-                    for s in symbols_list:
-                        symbol = s.get("symbol")
-                        if s.get("status") == "TRADING" and symbol:
-                            active_symbols.append(symbol)
-
-                    self.logger.info(f"Found {len(active_symbols)} active symbols with coin info")
-                    return active_symbols
-
-        except aiohttp.ClientError as e:
-            self.logger.error(f"HTTP error fetching symbols: {e}")
-            self.notify_listener("on_error", f"HTTP error fetching symbols: {e}")
+    def parse_symbols(self, data: dict | list[dict]) -> list[str]:
+        symbols_list: list[dict] = data.get("symbols", [])
+        if not symbols_list:
+            self.logger.warning("No symbols found or API response format changed")
+            self.notify_listener("on_error", self.exchange, "No symbols found or API response format changed")
             return []
-        except json.JSONDecodeError as e:
-            self.logger.error(f"JSON decode error fetching symbols: {e}")
-            self.notify_listener("on_error", f"JSON decode error fetching symbols: {e}")
-            return []
-        except Exception as e:
-            self.logger.exception(f"Unexpected error fetching symbols: {e}")
-            self.notify_listener("on_error", f"Unexpected error fetching symbols: {e}")
-            return []
+
+        return [s.get("symbol") for s in symbols_list if s.get("status") == "TRADING" and s.get("symbol")]
 
     async def subscribe_symbols(self, symbols: list[str]) -> None:
         if not self.websocket:
@@ -87,10 +69,10 @@ class BinanceClient(BaseExchangeClient):
             pass
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON decode error processing message: {e}")
-            self.notify_listener("on_error", f"JSON decode error processing message: {e}")
+            self.notify_listener("on_error", self.exchange, f"JSON decode error processing message: {e}")
         except Exception as e:
             self.logger.exception(f"Unexpected error processing message: {e}")
-            self.notify_listener("on_error", f"Unexpected error processing message: {e}")
+            self.notify_listener("on_error", self.exchange, f"Unexpected error processing message: {e}")
 
     def handle_single_item_data(self, item_data: dict[str, Any]) -> None:
         event_type = item_data.get("e")

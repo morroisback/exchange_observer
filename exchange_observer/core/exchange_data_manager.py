@@ -1,17 +1,28 @@
 import asyncio
 import logging
 
+from typing import Callable
+
 from .arbitrage_engine import ArbitrageEngine
-from .interfaces import IExchangeClient, IExchangeClientListener, IAsyncTask
-from .models import PriceData
+from .interfaces import IExchangeClientListener, IAsyncTask
+from .models import PriceData, Exchange
 from .price_data_store import PriceDataStore
 
 
 class ExchangeDataManager(IExchangeClientListener, IAsyncTask):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        connected_callback: Callable[[Exchange], None] = None,
+        disconnected_callback: Callable[[Exchange], None] = None,
+        error_callback: Callable[[Exchange, str], None] = None,
+    ) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        self.clients: dict[str, IExchangeClient] = {}
+        self.connected_callback = connected_callback
+        self.disconnected_callback = disconnected_callback
+        self.error_callback = error_callback
+
+        self.clients: dict[str, IAsyncTask] = {}
         self.price_data_store: PriceDataStore | None = None
         self.arbitrage_engine: ArbitrageEngine | None = None
 
@@ -19,7 +30,7 @@ class ExchangeDataManager(IExchangeClientListener, IAsyncTask):
         self.is_running = False
 
     def configure(
-        self, clients: dict[str, IExchangeClient], price_data_store: PriceDataStore, arbitrage_engine: ArbitrageEngine
+        self, clients: dict[str, IAsyncTask], price_data_store: PriceDataStore, arbitrage_engine: ArbitrageEngine
     ) -> None:
         self.clients = clients
         self.price_data_store = price_data_store
@@ -30,14 +41,20 @@ class ExchangeDataManager(IExchangeClientListener, IAsyncTask):
     def on_data_received(self, data: PriceData) -> None:
         self.price_data_store.update_price_data(data)
 
-    def on_error(self, message: str) -> None:
+    def on_error(self, exchange: Exchange, message: str) -> None:
         self.logger.error(f"Client error: {message}")
+        if self.error_callback:
+            self.error_callback(exchange, message)
 
-    def on_connected(self) -> None:
+    def on_connected(self, exchange: Exchange) -> None:
         self.logger.info("Client connected")
+        if self.connected_callback:
+            self.connected_callback(exchange)
 
-    def on_disconnected(self) -> None:
+    def on_disconnected(self, exchange: Exchange) -> None:
         self.logger.info("Client disconnected")
+        if self.disconnected_callback:
+            self.disconnected_callback(exchange)
 
     async def start(self) -> None:
         if not self.is_configured:
