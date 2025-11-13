@@ -1,4 +1,5 @@
 import pandas as pd
+import threading
 
 from datetime import datetime, timedelta, timezone
 from itertools import permutations
@@ -32,6 +33,7 @@ class PriceDataStore:
         self.df = pd.DataFrame(columns=self.COLUMNS).astype(self.DTYPE_MAP)
         self.df.set_index(["exchange", "symbol"], inplace=True)
         self.pending_updates: dict[tuple[str, str], PriceData] = {}
+        self.lock = threading.Lock()
 
     def update_price_data(self, price_data: PriceData) -> None:
         key = (price_data.exchange.value, price_data.symbol)
@@ -45,26 +47,30 @@ class PriceDataStore:
         update_df = pd.DataFrame(new_data).astype(self.DTYPE_MAP)
         update_df.set_index(["exchange", "symbol"], inplace=True)
 
-        self.df = update_df.combine_first(self.df)
+        with self.lock:
+            self.df = update_df.combine_first(self.df)
+
         self.pending_updates.clear()
 
     def get_dataframe(self) -> pd.DataFrame:
-        return self.df.copy()
+        with self.lock:
+            return self.df.copy()
 
     def get_data_for_symbol(self, exchange: Exchange, symbol: str) -> PriceData | None:
-        try:
-            row = self.df.loc[(exchange.value, symbol)]
-            return PriceData(
-                exchange=exchange,
-                symbol=symbol,
-                bid_price=row["bid_price"],
-                bid_quantity=row["bid_quantity"],
-                ask_price=row["ask_price"],
-                ask_quantity=row["ask_quantity"],
-                timestamp_utc=row["timestamp_utc"],
-            )
-        except KeyError:
-            return None
+        with self.lock:
+            try:
+                row = self.df.loc[(exchange.value, symbol)]
+                return PriceData(
+                    exchange=exchange,
+                    symbol=symbol,
+                    bid_price=row["bid_price"],
+                    bid_quantity=row["bid_quantity"],
+                    ask_price=row["ask_price"],
+                    ask_quantity=row["ask_quantity"],
+                    timestamp_utc=row["timestamp_utc"],
+                )
+            except KeyError:
+                return None
 
     def find_arbitrage_opportunities(
         self, min_profit_percent: float = 0.1, max_data_age_seconds: int = 10
@@ -72,7 +78,9 @@ class PriceDataStore:
         opportunities: list[ArbitrageOpportunity] = []
         current_utc_time = datetime.now(timezone.utc)
 
-        df_temp = self.df.reset_index()
+        with self.lock:
+            df_temp = self.df.reset_index()
+
         fresh_data_df: pd.DataFrame = df_temp[
             (current_utc_time - df_temp["timestamp_utc"]) <= timedelta(seconds=max_data_age_seconds)
         ]
