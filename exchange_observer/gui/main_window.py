@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QCloseEvent
 
 from exchange_observer.core import Exchange
@@ -210,16 +210,11 @@ class MainWindow(QMainWindow):
         table_view.setSortingEnabled(True)
         return table_view
 
+    def set_controls_enabled(self, enabled: bool) -> None:
+        self.exchanges_group.setEnabled(enabled)
+        self.params_group.setEnabled(enabled)
+
     def connect_signals(self) -> None:
-        self.start_btn.clicked.connect(self.on_start_clicked)
-        self.stop_btn.clicked.connect(self.on_stop_clicked)
-
-        self.whitelist_add_btn.clicked.connect(self.on_whitelist_add_clicked)
-        self.blacklist_add_btn.clicked.connect(self.on_blacklist_add_clicked)
-
-        self.whitelist_remove_btn.clicked.connect(self.on_whitelist_remove_clicked)
-        self.blacklist_remove_btn.clicked.connect(self.on_blacklist_remove_clicked)
-
         self.filter_mode_all_radio.clicked.connect(self.emit_filter_settings)
         self.filter_mode_whitelist_radio.clicked.connect(self.emit_filter_settings)
         self.filter_mode_btc_radio.clicked.connect(self.emit_filter_settings)
@@ -230,16 +225,26 @@ class MainWindow(QMainWindow):
         self.blacklist_list.model().rowsInserted.connect(self.emit_filter_settings)
         self.blacklist_list.model().rowsRemoved.connect(self.emit_filter_settings)
 
+        self.whitelist_add_btn.clicked.connect(self.on_whitelist_add_clicked)
+        self.blacklist_add_btn.clicked.connect(self.on_blacklist_add_clicked)
+        
+        self.whitelist_remove_btn.clicked.connect(self.on_whitelist_remove_clicked)
+        self.blacklist_remove_btn.clicked.connect(self.on_blacklist_remove_clicked)
+
         self.filter_settings_changed.connect(self.controller.opportunities_model.set_filter)
 
         self.controller.exchange_connected.connect(self.update_exchange_status_connected)
         self.controller.exchange_disconnected.connect(self.update_exchange_status_disconnected)
         self.controller.exchange_error.connect(self.update_exchange_status_error)
 
-        self.controller.status_updated.connect(self.statusBar().showMessage)
+        self.start_btn.clicked.connect(self.on_start_clicked)
+        self.stop_btn.clicked.connect(self.on_stop_clicked)
         self.controller.app_stopped.connect(self.on_app_stopped_ui_update)
         self.controller.finished.connect(self.on_cleanup_finished)
 
+        self.controller.status_updated.connect(self.statusBar().showMessage)
+
+    @pyqtSlot()
     def emit_filter_settings(self) -> None:
         if self.filter_mode_all_radio.isChecked():
             mode = FilterMode.ALL
@@ -260,6 +265,7 @@ class MainWindow(QMainWindow):
         settings = FilterSettings(mode, whitelist, blacklist)
         self.filter_settings_changed.emit(settings)
 
+    @pyqtSlot()
     def on_whitelist_add_clicked(self) -> None:
         dialog = QInputDialog(self)
         dialog.setWindowTitle("Добавить символ в белый список")
@@ -275,6 +281,7 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.warning(self, "Дубликат", f"Символ '{text}' уже есть в списке.")
 
+    @pyqtSlot()
     def on_blacklist_add_clicked(self) -> None:
         dialog = QInputDialog(self)
         dialog.setWindowTitle("Добавить символ в черный список")
@@ -290,18 +297,35 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.warning(self, "Дубликат", f"Символ '{text}' уже есть в списке.")
 
+    @pyqtSlot()
     def on_whitelist_remove_clicked(self) -> None:
         for item in self.whitelist_list.selectedItems():
             self.whitelist_list.takeItem(self.whitelist_list.row(item))
 
+    @pyqtSlot()
     def on_blacklist_remove_clicked(self) -> None:
         for item in self.blacklist_list.selectedItems():
             self.blacklist_list.takeItem(self.blacklist_list.row(item))
 
-    def set_controls_enabled(self, enabled: bool) -> None:
-        self.exchanges_group.setEnabled(enabled)
-        self.params_group.setEnabled(enabled)
+    @pyqtSlot(str)
+    def update_exchange_status_connected(self, exchange_name: str) -> None:
+        checkbox = self.exchange_checkboxes.get(exchange_name)
+        if checkbox:
+            checkbox.setStyleSheet("color: green")
 
+    @pyqtSlot(str)
+    def update_exchange_status_disconnected(self, exchange_name: str) -> None:
+        checkbox = self.exchange_checkboxes.get(exchange_name)
+        if checkbox:
+            checkbox.setStyleSheet("color: yellow")
+
+    @pyqtSlot(str)
+    def update_exchange_status_error(self, exchange_name: str) -> None:
+        checkbox = self.exchange_checkboxes.get(exchange_name)
+        if checkbox:
+            checkbox.setStyleSheet("color: red")
+
+    @pyqtSlot()
     def on_start_clicked(self) -> None:
         exchanges_config = {name: cb.isChecked() for name, cb in self.exchange_checkboxes.items()}
 
@@ -321,10 +345,12 @@ class MainWindow(QMainWindow):
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
 
+    @pyqtSlot()
     def on_stop_clicked(self) -> None:
         self.controller.stop_app()
         self.stop_btn.setEnabled(False)
 
+    @pyqtSlot()
     def on_app_stopped_ui_update(self) -> None:
         self.controller.opportunities_model.update_data([])
         for exchange_name, checkbox in self.exchange_checkboxes.items():
@@ -337,21 +363,7 @@ class MainWindow(QMainWindow):
             self.start_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
 
-    def update_exchange_status_connected(self, exchange_name: str) -> None:
-        checkbox = self.exchange_checkboxes.get(exchange_name)
-        if checkbox:
-            checkbox.setStyleSheet("color: green")
-
-    def update_exchange_status_disconnected(self, exchange_name: str) -> None:
-        checkbox = self.exchange_checkboxes.get(exchange_name)
-        if checkbox:
-            checkbox.setStyleSheet("color: yellow")
-
-    def update_exchange_status_error(self, exchange_name: str, message: str) -> None:
-        checkbox = self.exchange_checkboxes.get(exchange_name)
-        if checkbox:
-            checkbox.setStyleSheet("color: red")
-
+    @pyqtSlot()
     def on_cleanup_finished(self) -> None:
         self.cleanup_finished = True
         self.close()

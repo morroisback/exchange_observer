@@ -1,11 +1,13 @@
 import pandas as pd
 
-from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, pyqtSignal, pyqtSlot
 
 from exchange_observer.gui.gui_models import FilterMode, FilterSettings
 
 
 class ArbitrageOpportunitiesModel(QAbstractTableModel):
+    opportunities_received = pyqtSignal(list)
+
     COLUMNS = [
         "symbol",
         "buy_exchange",
@@ -38,6 +40,9 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
         self.whitelist = set()
         self.blacklist = set()
 
+        self.opportunities_received.connect(self.update_opportunities)
+
+    @pyqtSlot(object)
     def set_filter(self, settings: FilterSettings) -> None:
         self.filter_mode = settings.mode
         self.whitelist = set(settings.whitelist)
@@ -125,6 +130,10 @@ class ArbitrageOpportunitiesModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def update_data(self, new_opportunities: list[dict]) -> None:
+        self.opportunities_received.emit(new_opportunities)
+
+    @pyqtSlot(list)
+    def update_opportunities(self, new_opportunities: list[dict]) -> None:
         self.layoutAboutToBeChanged.emit()
         if new_opportunities:
             df = pd.DataFrame(new_opportunities)

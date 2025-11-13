@@ -2,7 +2,7 @@ import logging
 
 from concurrent.futures import Future
 
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtSignal
 
 from exchange_observer import ExchangeObserverApp
 from exchange_observer.core import Exchange, ArbitrageOpportunity
@@ -17,7 +17,7 @@ class AppController(QObject):
     finished = pyqtSignal()
     exchange_connected = pyqtSignal(str)
     exchange_disconnected = pyqtSignal(str)
-    exchange_error = pyqtSignal(str, str)
+    exchange_error = pyqtSignal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -40,9 +40,8 @@ class AppController(QObject):
         self.exchange_disconnected.emit(exchange.value)
 
     def on_exchange_error(self, exchange: Exchange, error: str) -> None:
-        self.exchange_error.emit(exchange.value, error)
+        self.exchange_error.emit(exchange.value)
 
-    @pyqtSlot(dict)
     def start_app(self, config: AppSettings) -> None:
         self.logger.info("Start app command received with config: %s", config)
         self.status_updated.emit("Запуск...")
@@ -72,7 +71,6 @@ class AppController(QObject):
             self.logger.exception("Failed to start ExchangeObserverApp")
             self.status_updated.emit(f"Ошибка при запуске: {e}")
 
-    @pyqtSlot()
     def stop_app(self) -> None:
         self.logger.info("Stop app command received")
         self.status_updated.emit("Остановка...")
